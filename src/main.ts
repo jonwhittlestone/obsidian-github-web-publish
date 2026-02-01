@@ -112,6 +112,14 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: 'view-activity-log',
+			name: 'View activity log',
+			callback: () => {
+				void this.openActivityLog();
+			},
+		});
+
 		// Plugin loaded successfully
 	}
 
@@ -168,6 +176,36 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			await this.saveSettings();
 			this.statusBar.setConnected(false);
 			new Notice('GitHub session expired. Please login again in settings.');
+		}
+	}
+
+	/**
+	 * Open the activity log for the first configured site
+	 */
+	private async openActivityLog(): Promise<void> {
+		const site = this.settings.sites[0];
+		if (!site?.vaultPath) {
+			new Notice('No site configured. Please configure a site in settings first.');
+			return;
+		}
+
+		const logPath = `${site.vaultPath}/_publish-log.md`;
+		let file = this.app.vault.getAbstractFileByPath(logPath);
+
+		if (!file) {
+			// Create the log file if it doesn't exist
+			const log = new ActivityLog(this.app.vault, site.vaultPath);
+			await log.log({
+				status: 'warning',
+				postTitle: 'Activity Log',
+				filename: '_publish-log.md',
+				details: 'Log file created',
+			});
+			file = this.app.vault.getAbstractFileByPath(logPath);
+		}
+
+		if (file instanceof TFile) {
+			await this.app.workspace.getLeaf().openFile(file);
 		}
 	}
 
