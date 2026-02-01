@@ -97,6 +97,19 @@ make test
 make test-watch
 ```
 
+### Testing in Obsidian
+
+After starting the development build:
+
+1. Run `make dev` (keep terminal open)
+2. Open the test vault in Obsidian:
+   - File → Open vault → `/home/jon/code/playground/test-vault-for-obsidian-development`
+3. Enable the plugin:
+   - Settings → Community plugins → Enable "GitHub Web Publish"
+4. Test the settings:
+   - Settings → GitHub Web Publish (under Community plugins)
+5. Changes auto-reload when you save source files (with Hot Reload plugin installed)
+
 ### Project Structure
 
 ```
