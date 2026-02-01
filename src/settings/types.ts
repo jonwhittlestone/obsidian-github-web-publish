@@ -39,8 +39,6 @@ export interface PluginSettings {
 	addDatePrefix: boolean;
 	/** Open PR in browser after creation */
 	openPrInBrowser: boolean;
-	/** Enable activity log */
-	enableActivityLog: boolean;
 	/** Delete associated assets when unpublishing */
 	deleteAssetsOnUnpublish: boolean;
 	/** Require confirmation before unpublishing */
@@ -55,7 +53,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	moveAfterPublish: true,
 	addDatePrefix: true,
 	openPrInBrowser: false,
-	enableActivityLog: true,
 	deleteAssetsOnUnpublish: false,
 	confirmUnpublish: true,
 };

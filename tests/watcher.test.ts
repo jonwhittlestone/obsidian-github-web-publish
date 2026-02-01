@@ -31,7 +31,6 @@ function createMockPlugin(sites: SiteConfig[]): Pick<GitHubWebPublishPlugin, 'se
 			moveAfterPublish: true,
 			addDatePrefix: true,
 			openPrInBrowser: false,
-			enableActivityLog: true,
 			deleteAssetsOnUnpublish: false,
 			confirmUnpublish: true,
 		},

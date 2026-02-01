@@ -6,13 +6,16 @@
 
 import { TFile, Vault } from 'obsidian';
 import { GitHubClient } from '../github';
+import { FrontmatterValidator } from './validator';
 import type { SiteConfig, PluginSettings } from '../settings/types';
+import type { ValidationResult } from './validator';
 
 export interface PublishResult {
 	success: boolean;
 	prNumber?: number;
 	prUrl?: string;
 	error?: string;
+	validationResult?: ValidationResult;
 }
 
 /**
@@ -60,6 +63,19 @@ export class Publisher {
 		// Validate we have auth
 		if (!this.settings.githubAuth?.token) {
 			return { success: false, error: 'Not authenticated with GitHub' };
+		}
+
+		// Validate frontmatter before any GitHub operations
+		const validator = new FrontmatterValidator(this.vault);
+		const validationResult = await validator.validate(file);
+
+		if (!validationResult.valid) {
+			const errorMessage = FrontmatterValidator.formatErrors(validationResult);
+			return {
+				success: false,
+				error: `Validation failed:\n${errorMessage}`,
+				validationResult,
+			};
 		}
 
 		// Parse owner/repo from site config

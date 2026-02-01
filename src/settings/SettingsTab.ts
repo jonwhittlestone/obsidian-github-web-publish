@@ -384,14 +384,8 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 		new Setting(containerEl).setName('Activity log').setHeading();
 
 		new Setting(containerEl)
-			.setName('Enable activity log')
-			.setDesc('Write publish/unpublish events to _publish-log.md in each site folder')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.enableActivityLog)
-				.onChange(async (value) => {
-					this.plugin.settings.enableActivityLog = value;
-					await this.plugin.saveSettings();
-				}));
+			.setName('Activity log location')
+			.setDesc('All publish/unpublish events are logged to _publish-log.md in each site folder.');
 	}
 
 	/**

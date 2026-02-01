@@ -210,6 +210,19 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	}
 
 	/**
+	 * Move a file back to the unpublished folder
+	 * Used when validation fails to allow the user to correct mistakes
+	 */
+	private async moveToUnpublished(file: TFile, site: SiteConfig): Promise<void> {
+		const unpublishedPath = `${site.vaultPath}/unpublished/${file.name}`;
+		try {
+			await this.app.fileManager.renameFile(file, unpublishedPath);
+		} catch (e) {
+			console.error('[GitHubWebPublish] Failed to move file to unpublished:', e);
+		}
+	}
+
+	/**
 	 * Handle publishing a file to GitHub
 	 */
 	private async handlePublish(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
@@ -222,18 +235,26 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		const publisher = new Publisher(this.app.vault, this.settings);
 		const result = await publisher.publish(file, site, immediate);
 
-		// Log to activity log if enabled
-		if (this.settings.enableActivityLog) {
-			const log = new ActivityLog(this.app.vault, site.vaultPath);
-			await log.log({
-				status: result.success ? (immediate ? 'published' : 'queued') : 'failed',
-				postTitle: file.basename,
-				filename: file.name,
-				prNumber: result.prNumber,
-				prUrl: result.prUrl,
-				error: result.error,
-			});
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+		// Determine log status - distinguish validation failures from other errors
+		let logStatus: 'published' | 'queued' | 'failed' | 'validation';
+		if (result.success) {
+			logStatus = immediate ? 'published' : 'queued';
+		} else if (result.validationResult && !result.validationResult.valid) {
+			logStatus = 'validation';
+		} else {
+			logStatus = 'failed';
 		}
+
+		await log.log({
+			status: logStatus,
+			postTitle: file.basename,
+			filename: file.name,
+			prNumber: result.prNumber,
+			prUrl: result.prUrl,
+			error: result.error,
+		});
 
 		if (result.success) {
 			this.statusBar.setState('success');
@@ -250,7 +271,24 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			}
 		} else {
 			this.statusBar.setState('error');
-			new Notice(`Failed to publish: ${result.error}`);
+
+			// On validation failure, move file back to unpublished folder
+			if (result.validationResult && !result.validationResult.valid) {
+				await this.moveToUnpublished(file, site);
+
+				// Log the move back to unpublished
+				const moveLog = new ActivityLog(this.app.vault, site.vaultPath);
+				await moveLog.log({
+					status: 'warning',
+					postTitle: file.basename,
+					filename: file.name,
+					details: 'Moved back to unpublished/ due to validation failure',
+				});
+
+				new Notice(`Validation failed: ${file.name} moved back to unpublished.\n\n${result.error}`);
+			} else {
+				new Notice(`Failed to publish: ${result.error}`);
+			}
 		}
 	}
 }

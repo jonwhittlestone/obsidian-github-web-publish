@@ -28,10 +28,6 @@ describe('Settings Types', () => {
 			expect(DEFAULT_SETTINGS.openPrInBrowser).toBe(false);
 		});
 
-		it('should enable activityLog by default', () => {
-			expect(DEFAULT_SETTINGS.enableActivityLog).toBe(true);
-		});
-
 		it('should disable deleteAssetsOnUnpublish by default', () => {
 			expect(DEFAULT_SETTINGS.deleteAssetsOnUnpublish).toBe(false);
 		});
@@ -53,7 +49,6 @@ describe('Settings Types', () => {
 				moveAfterPublish: true,
 				addDatePrefix: true,
 				openPrInBrowser: false,
-				enableActivityLog: true,
 				deleteAssetsOnUnpublish: false,
 				confirmUnpublish: true,
 			};
