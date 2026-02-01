@@ -11,6 +11,7 @@ import {
 } from './settings';
 import { FileWatcher, Publisher } from './publishing';
 import { getUsername } from './github';
+import { StatusBar } from './ui';
 import type { SiteConfig } from './settings/types';
 
 /**
@@ -27,12 +28,23 @@ interface AppWithSettings {
 export default class GitHubWebPublishPlugin extends Plugin {
 	settings: PluginSettings;
 	private fileWatcher: FileWatcher;
+	private statusBar: StatusBar;
 
 	async onload() {
 		await this.loadSettings();
 
 		// Initialize file watcher
 		this.fileWatcher = new FileWatcher(this);
+
+		// Initialize status bar
+		this.statusBar = new StatusBar(this);
+		this.statusBar.setConnected(this.isAuthenticated());
+		this.statusBar.setOnClick(() => {
+			// Open settings when clicked
+			const appWithSettings = this.app as unknown as AppWithSettings;
+			appWithSettings.setting.open();
+			appWithSettings.setting.openTabById(this.manifest.id);
+		});
 
 		// Register file rename event listener
 		// Key: We ONLY listen to 'rename' events, NOT 'create' events.
@@ -103,7 +115,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	}
 
 	onunload() {
-		// Plugin unloaded
+		this.statusBar.destroy();
 	}
 
 	async loadSettings() {
@@ -146,10 +158,14 @@ export default class GitHubWebPublishPlugin extends Plugin {
 				this.settings.githubAuth.username = username;
 				await this.saveSettings();
 			}
+
+			// Update status bar
+			this.statusBar.setConnected(true);
 		} catch {
 			// Token is invalid - clear it
 			this.settings.githubAuth = null;
 			await this.saveSettings();
+			this.statusBar.setConnected(false);
 			new Notice('GitHub session expired. Please login again in settings.');
 		}
 	}
@@ -161,10 +177,15 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		const actionType = immediate ? 'Publishing' : 'Scheduling';
 		new Notice(`${actionType}: ${file.name}...`);
 
+		// Update status bar
+		this.statusBar.setState('publishing');
+
 		const publisher = new Publisher(this.app.vault, this.settings);
 		const result = await publisher.publish(file, site, immediate);
 
 		if (result.success) {
+			this.statusBar.setState('success');
+
 			if (immediate) {
 				new Notice(`Published: ${file.name}`);
 			} else {
@@ -176,6 +197,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 				window.open(result.prUrl, '_blank');
 			}
 		} else {
+			this.statusBar.setState('error');
 			new Notice(`Failed to publish: ${result.error}`);
 		}
 	}
