@@ -3,13 +3,14 @@
  * Publish notes to Jekyll/GitHub Pages via PR workflow
  */
 
-import { Notice, Plugin, TAbstractFile } from 'obsidian';
+import { Notice, Plugin, TAbstractFile, TFile } from 'obsidian';
 import {
 	GitHubWebPublishSettingTab,
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
-import { FileWatcher } from './publishing';
+import { FileWatcher, Publisher } from './publishing';
+import type { SiteConfig } from './settings/types';
 
 /**
  * Extended App interface to include the settings modal
@@ -40,15 +41,17 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
 				const action = this.fileWatcher.handleFileMove(file, oldPath);
 
-				// Notify user of detected actions (actual publishing comes later)
-				if (action.type === 'schedule-publish') {
-					new Notice(`Queued for scheduled publish: ${file.name}`);
-				} else if (action.type === 'immediate-publish') {
-					new Notice(`Publishing immediately: ${file.name}`);
+				// Handle publish actions
+				if (action.type === 'schedule-publish' || action.type === 'immediate-publish') {
+					void this.handlePublish(
+						action.file,
+						action.site,
+						action.type === 'immediate-publish'
+					);
 				} else if (action.type === 'unpublish') {
-					new Notice(`Unpublishing: ${file.name}`);
+					new Notice(`Unpublishing: ${file.name} (not yet implemented)`);
 				} else if (action.type === 'update') {
-					new Notice(`Updating published post: ${file.name}`);
+					new Notice(`Updating: ${file.name} (not yet implemented)`);
 				}
 			})
 		);
@@ -118,5 +121,31 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	 */
 	getGitHubUsername(): string | undefined {
 		return this.settings.githubAuth?.username;
+	}
+
+	/**
+	 * Handle publishing a file to GitHub
+	 */
+	private async handlePublish(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
+		const actionType = immediate ? 'Publishing' : 'Scheduling';
+		new Notice(`${actionType}: ${file.name}...`);
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.publish(file, site, immediate);
+
+		if (result.success) {
+			if (immediate) {
+				new Notice(`Published: ${file.name}`);
+			} else {
+				new Notice(`Scheduled for publish: ${file.name}\nPR #${result.prNumber}`);
+			}
+
+			// Open PR in browser if setting enabled
+			if (this.settings.openPrInBrowser && result.prUrl) {
+				window.open(result.prUrl, '_blank');
+			}
+		} else {
+			new Notice(`Failed to publish: ${result.error}`);
+		}
 	}
 }
