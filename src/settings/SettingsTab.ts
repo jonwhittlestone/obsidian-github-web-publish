@@ -12,7 +12,7 @@ import { AuthModal } from '../ui';
 // Default OAuth Client ID - users can override with their own
 // To use your own, create an OAuth App at github.com/settings/developers
 // and enable Device Flow in the app settings
-const DEFAULT_OAUTH_CLIENT_ID = '';
+const DEFAULT_OAUTH_CLIENT_ID = 'Ov23li0xc9wjXMk49Tj4';
 
 export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	plugin: GitHubWebPublishPlugin;
