@@ -7,8 +7,10 @@
 import { TFile, Vault } from 'obsidian';
 import { GitHubClient } from '../github';
 import { FrontmatterValidator } from './validator';
+import { ContentProcessor } from './content-processor';
 import type { SiteConfig, PluginSettings } from '../settings/types';
 import type { ValidationResult } from './validator';
+import type { AssetReference } from './content-processor';
 
 export interface PublishResult {
 	success: boolean;
@@ -16,6 +18,8 @@ export interface PublishResult {
 	prUrl?: string;
 	error?: string;
 	validationResult?: ValidationResult;
+	/** Assets referenced in the content (for future upload) */
+	assets?: AssetReference[];
 }
 
 /**
@@ -93,7 +97,14 @@ export class Publisher {
 
 		try {
 			// Read file content
-			const content = await this.vault.read(file);
+			const rawContent = await this.vault.read(file);
+
+			// Process content: convert wiki-links to standard markdown
+			const processor = new ContentProcessor({
+				assetsBasePath: `/${site.assetsPath}/`,
+				wikiLinkStyle: 'text', // Convert wiki-links to plain text (internal notes likely don't exist on Jekyll)
+			});
+			const { content, assets } = processor.process(rawContent);
 
 			// Generate slug and branch name
 			const slug = slugify(file.basename);
@@ -136,6 +147,7 @@ export class Publisher {
 				success: true,
 				prNumber: pr.number,
 				prUrl: pr.html_url,
+				assets,
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error';

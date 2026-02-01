@@ -8,3 +8,5 @@ export { Publisher } from './publisher';
 export type { PublishResult } from './publisher';
 export { FrontmatterValidator } from './validator';
 export type { ValidationResult, ValidationError, ValidationWarning, ValidationRule } from './validator';
+export { ContentProcessor } from './content-processor';
+export type { ContentProcessorOptions, ProcessedContent, AssetReference } from './content-processor';
