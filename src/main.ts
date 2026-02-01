@@ -12,6 +12,7 @@ import {
 import { FileWatcher, Publisher } from './publishing';
 import { getUsername } from './github';
 import { StatusBar } from './ui';
+import { ActivityLog } from './logging';
 import type { SiteConfig } from './settings/types';
 
 /**
@@ -182,6 +183,19 @@ export default class GitHubWebPublishPlugin extends Plugin {
 
 		const publisher = new Publisher(this.app.vault, this.settings);
 		const result = await publisher.publish(file, site, immediate);
+
+		// Log to activity log if enabled
+		if (this.settings.enableActivityLog) {
+			const log = new ActivityLog(this.app.vault, site.vaultPath);
+			await log.log({
+				status: result.success ? (immediate ? 'published' : 'queued') : 'failed',
+				postTitle: file.basename,
+				filename: file.name,
+				prNumber: result.prNumber,
+				prUrl: result.prUrl,
+				error: result.error,
+			});
+		}
 
 		if (result.success) {
 			this.statusBar.setState('success');
