@@ -1,90 +1,138 @@
-# Obsidian Sample Plugin
+# GitHub Web Publish
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+An Obsidian plugin for publishing notes to Jekyll/GitHub Pages via PR workflow.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## Features
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+- **Directory-based publishing**: Move files to trigger publish actions
+- **Scheduled publishing**: Queue posts for automatic merge at 2pm UK time
+- **Immediate publishing**: Merge PRs instantly when needed
+- **Mobile compatible**: Works on iOS and Android
+- **No git required**: All GitHub operations via API
 
-## First time developing plugins?
+## Installation
 
-Quick starting guide for new plugin devs:
+### From Community Plugins (Coming Soon)
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+1. Open Obsidian Settings → Community plugins
+2. Search for "GitHub Web Publish"
+3. Install and enable
 
-## Releasing new releases
+### Manual Installation
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+1. Download the latest release
+2. Extract to `.obsidian/plugins/obsidian-github-web-publish/`
+3. Enable in Settings → Community plugins
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+## Usage
 
-## Adding your plugin to the community plugin list
+### Directory Structure
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+Create this structure in your vault:
 
-## How to use
-
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
-
-## Improve code quality with eslint
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
-
-## Funding URL
-
-You can include funding URLs where people who use your plugin can financially support it.
-
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
-
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
+```
+_www/sites/<your-site>/
+├── unpublished/          # Draft posts (not synced)
+├── ready-for-publish/    # Queue for scheduled publish
+├── ready-for-publish-now/ # Immediate publish
+└── published/            # Archive of published posts
 ```
 
-If you have multiple URLs, you can also do:
+### Publishing Workflow
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
+1. **Write** your post in `unpublished/`
+2. **Schedule**: Move to `ready-for-publish/` (publishes at 2pm UK)
+3. **Or immediate**: Move to `ready-for-publish-now/` (publishes now)
+4. Post automatically moves to `published/` after success
+
+### Unpublishing
+
+Move a post from `published/` back to `unpublished/` to remove it from your blog.
+
+## Development
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/jonwhittlestone/obsidian-github-web-publish.git
+cd obsidian-github-web-publish
+
+# Install dependencies
+make install
+
+# Create symlink to test vault
+make symlink
+
+# Start development build
+make dev
 ```
 
-## API Documentation
+### Available Commands
 
-See https://docs.obsidian.md
+```bash
+make help        # Show all available targets
+make install     # Install npm dependencies
+make dev         # Start development build with watch mode
+make build       # Production build
+make test        # Run unit tests
+make test-watch  # Run unit tests in watch mode
+make lint        # Run ESLint
+make clean       # Remove build artifacts
+make symlink     # Create symlink to test vault
+```
+
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Run tests in watch mode
+make test-watch
+```
+
+### Project Structure
+
+```
+obsidian-github-web-publish/
+├── src/
+│   ├── main.ts              # Plugin entry point
+│   ├── settings/            # Settings UI
+│   ├── github/              # GitHub API integration
+│   ├── publishing/          # File watching & publishing logic
+│   ├── logging/             # Activity log
+│   └── ui/                  # Modals, status bar, notices
+├── tests/                   # Unit tests
+│   └── mocks/               # Obsidian API mocks
+├── Makefile                 # Build commands
+├── manifest.json            # Obsidian plugin manifest
+└── package.json             # npm configuration
+```
+
+## Configuration
+
+After installing, configure in Settings → GitHub Web Publish:
+
+1. **Login with GitHub**: Authenticate via OAuth device flow
+2. **Add Site**: Configure your Jekyll blog repository
+3. **Set paths**: Specify `_posts` and assets directories
+
+## Requirements
+
+- Obsidian v0.12.11 or higher
+- GitHub account with repository access
+- Jekyll blog with GitHub Actions for deployment
+
+## License
+
+MIT
+
+## Author
+
+Jon Whittlestone - [GitHub](https://github.com/jonwhittlestone)

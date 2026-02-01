@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"id": "obsidian-github-web-publish",
+	"name": "GitHub Web Publish",
+	"version": "0.1.0",
+	"minAppVersion": "0.12.11",
+	"description": "Publish notes to Jekyll/GitHub Pages via PR workflow",
+	"author": "Jon Whittlestone",
+	"authorUrl": "https://github.com/jonwhittlestone",
 	"isDesktopOnly": false
 }
