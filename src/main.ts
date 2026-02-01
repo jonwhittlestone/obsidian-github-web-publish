@@ -10,6 +10,7 @@ import {
 	PluginSettings,
 } from './settings';
 import { FileWatcher, Publisher } from './publishing';
+import { getUsername } from './github';
 import type { SiteConfig } from './settings/types';
 
 /**
@@ -68,6 +69,11 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		// Add settings tab
 		this.addSettingTab(new GitHubWebPublishSettingTab(this.app, this));
 
+		// Validate token on startup (non-blocking)
+		if (this.settings.githubAuth?.token) {
+			void this.validateToken();
+		}
+
 		// Register commands
 		this.addCommand({
 			id: 'publish-current-note',
@@ -121,6 +127,31 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	 */
 	getGitHubUsername(): string | undefined {
 		return this.settings.githubAuth?.username;
+	}
+
+	/**
+	 * Validate the stored token on startup
+	 * If invalid, clear it and notify the user
+	 */
+	private async validateToken(): Promise<void> {
+		const token = this.settings.githubAuth?.token;
+		if (!token) return;
+
+		try {
+			// Try to get the username - this validates the token
+			const username = await getUsername(token);
+
+			// Update username if it changed or wasn't stored
+			if (this.settings.githubAuth && this.settings.githubAuth.username !== username) {
+				this.settings.githubAuth.username = username;
+				await this.saveSettings();
+			}
+		} catch {
+			// Token is invalid - clear it
+			this.settings.githubAuth = null;
+			await this.saveSettings();
+			new Notice('GitHub session expired. Please login again in settings.');
+		}
 	}
 
 	/**
