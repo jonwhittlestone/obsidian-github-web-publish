@@ -45,6 +45,8 @@ export interface PluginSettings {
 	deleteAssetsOnUnpublish: boolean;
 	/** Require confirmation before unpublishing */
 	confirmUnpublish: boolean;
+	/** Custom OAuth Client ID (optional, for users who create their own GitHub OAuth App) */
+	oauthClientId?: string;
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {

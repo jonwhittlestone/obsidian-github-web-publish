@@ -6,6 +6,13 @@
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type GitHubWebPublishPlugin from '../main';
 import type { SiteConfig } from './types';
+import { performDeviceFlow, OAuthError } from '../github';
+import { AuthModal } from '../ui';
+
+// Default OAuth Client ID - users can override with their own
+// To use your own, create an OAuth App at github.com/settings/developers
+// and enable Device Flow in the app settings
+const DEFAULT_OAUTH_CLIENT_ID = '';
 
 export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	plugin: GitHubWebPublishPlugin;
@@ -33,12 +40,13 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 
 		if (auth?.token) {
 			// Already authenticated
+			const tokenType = auth.tokenType === 'oauth' ? 'OAuth' : 'PAT';
 			const statusEl = containerEl.createDiv({ cls: 'setting-item' });
 			statusEl.createEl('div', {
 				cls: 'setting-item-info',
 			}).createEl('div', {
 				cls: 'setting-item-name',
-				text: `✅ Connected${auth.username ? ` as @${auth.username}` : ''}`,
+				text: `✅ Connected${auth.username ? ` as @${auth.username}` : ''} (${tokenType})`,
 			});
 
 			new Setting(containerEl)
@@ -54,15 +62,30 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 						this.display();
 					}));
 		} else {
-			// Not authenticated
+			// Not authenticated - show OAuth option first
 			new Setting(containerEl)
 				.setName('Connection status')
-				.setDesc('Not connected. Add a token below to enable publishing.');
+				.setDesc('Not connected. Login with GitHub or use a personal access token.');
 
-			const tokenInputContainer = containerEl.createDiv();
+			// OAuth Login button
+			new Setting(containerEl)
+				 
+				.setName('Login with GitHub')
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setDesc('Recommended: Use OAuth Device Flow for easy authentication')
+				.addButton(button => button
+					.setButtonText('Login with GitHub')
+					.setCta()
+					.onClick(() => { void this.startOAuthFlow(); }));
+
+			// Collapsible PAT section as alternative
+			const patDetails = containerEl.createEl('details', { cls: 'github-publish-pat-section' });
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			patDetails.createEl('summary', { text: 'Or use a Personal Access Token' });
+
 			let tokenValue = '';
 
-			new Setting(tokenInputContainer)
+			new Setting(patDetails)
 				.setName('Personal access token')
 				.setDesc('Create a token at github.com/settings/tokens with "repo" scope')
 				.addText(text => text
@@ -74,7 +97,6 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 					}))
 				.addButton(button => button
 					.setButtonText('Connect')
-					.setCta()
 					.onClick(async () => {
 						if (!tokenValue || !tokenValue.startsWith('ghp_')) {
 							new Notice('Please enter a valid GitHub token (starts with ghp_)');
@@ -102,11 +124,65 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 							button.setButtonText('Connect');
 						}
 					}));
+		}
+	}
 
-			// Help link
-			new Setting(containerEl)
-				.setName('Need help?')
-				.setDesc('See configuration-guides/github-pat-setup.md in your vault for setup instructions');
+	/**
+	 * Start the OAuth Device Flow
+	 */
+	private async startOAuthFlow(): Promise<void> {
+		const clientId = this.plugin.settings.oauthClientId || DEFAULT_OAUTH_CLIENT_ID;
+
+		if (!clientId) {
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			new Notice('OAuth Client ID not configured. Please use a Personal Access Token or set a Client ID in Advanced settings.');
+			return;
+		}
+
+		const modal = new AuthModal(this.app, {
+			onCancel: () => {
+				// Modal handles cancellation internally
+			},
+		});
+		modal.open();
+
+		try {
+			const { token, username } = await performDeviceFlow(
+				clientId,
+				(verification) => {
+					modal.showVerification(
+						verification.userCode,
+						verification.verificationUri,
+						verification.expiresIn
+					);
+				},
+				() => modal.isCancelled()
+			);
+
+			// Save the token
+			this.plugin.settings.githubAuth = {
+				token,
+				tokenType: 'oauth',
+				username,
+			};
+			await this.plugin.saveSettings();
+
+			modal.showSuccess(username);
+
+			// Refresh display after a short delay
+			setTimeout(() => {
+				modal.close();
+				this.display();
+			}, 1500);
+
+		} catch (error) {
+			if (error instanceof OAuthError && error.code === 'cancelled') {
+				// User cancelled, modal already closed
+				return;
+			}
+
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			modal.showError(message);
 		}
 	}
 
