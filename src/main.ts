@@ -3,12 +3,13 @@
  * Publish notes to Jekyll/GitHub Pages via PR workflow
  */
 
-import { Notice, Plugin } from 'obsidian';
+import { Notice, Plugin, TAbstractFile } from 'obsidian';
 import {
 	GitHubWebPublishSettingTab,
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
+import { FileWatcher } from './publishing';
 
 /**
  * Extended App interface to include the settings modal
@@ -23,9 +24,34 @@ interface AppWithSettings {
 
 export default class GitHubWebPublishPlugin extends Plugin {
 	settings: PluginSettings;
+	private fileWatcher: FileWatcher;
 
 	async onload() {
 		await this.loadSettings();
+
+		// Initialize file watcher
+		this.fileWatcher = new FileWatcher(this);
+
+		// Register file rename event listener
+		// Key: We ONLY listen to 'rename' events, NOT 'create' events.
+		// This provides sync protection because Dropbox/iCloud sync
+		// creates files (appears as 'create'), while user moves are 'rename'.
+		this.registerEvent(
+			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+				const action = this.fileWatcher.handleFileMove(file, oldPath);
+
+				// Notify user of detected actions (actual publishing comes later)
+				if (action.type === 'schedule-publish') {
+					new Notice(`Queued for scheduled publish: ${file.name}`);
+				} else if (action.type === 'immediate-publish') {
+					new Notice(`Publishing immediately: ${file.name}`);
+				} else if (action.type === 'unpublish') {
+					new Notice(`Unpublishing: ${file.name}`);
+				} else if (action.type === 'update') {
+					new Notice(`Updating published post: ${file.name}`);
+				}
+			})
+		);
 
 		// Add ribbon icon
 		this.addRibbonIcon('upload-cloud', 'GitHub web publish', () => {

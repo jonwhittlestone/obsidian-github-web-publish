@@ -11,11 +11,9 @@ export default defineConfig({
 			include: ['src/**/*.ts'],
 			exclude: ['src/main.ts'], // Exclude Obsidian entry point from coverage
 		},
-	},
-	resolve: {
 		alias: {
 			// Mock Obsidian module for tests
-			obsidian: './tests/mocks/obsidian.ts',
+			obsidian: new URL('./tests/mocks/obsidian.ts', import.meta.url).pathname,
 		},
 	},
 });
