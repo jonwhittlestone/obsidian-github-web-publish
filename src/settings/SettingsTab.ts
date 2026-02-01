@@ -167,6 +167,31 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
+		new Setting(containerEl)
+			.setName('Create folder structure')
+			.setDesc('Create unpublished/, ready-for-publish/, ready-for-publish-now/, and published/ folders')
+			.addButton(button => button
+				.setButtonText('Create folders')
+				.onClick(async () => {
+					if (!site.vaultPath) {
+						new Notice('Please set a vault path first');
+						return;
+					}
+
+					button.setDisabled(true);
+					button.setButtonText('Creating...');
+
+					try {
+						await this.createSiteFolders(site.vaultPath);
+						new Notice('Folder structure created');
+					} catch (error) {
+						new Notice(`Failed to create folders: ${error instanceof Error ? error.message : 'Unknown error'}`);
+					} finally {
+						button.setDisabled(false);
+						button.setButtonText('Create folders');
+					}
+				}));
+
 		// Collapsible advanced settings
 		const advancedDetails = containerEl.createEl('details', { cls: 'github-publish-advanced' });
 		advancedDetails.createEl('summary', { text: 'Advanced settings' });
@@ -291,6 +316,26 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 					this.plugin.settings.enableActivityLog = value;
 					await this.plugin.saveSettings();
 				}));
+	}
+
+	/**
+	 * Create the folder structure for a site
+	 */
+	private async createSiteFolders(vaultPath: string): Promise<void> {
+		const folders = [
+			'unpublished',
+			'ready-for-publish',
+			'ready-for-publish-now',
+			'published',
+		];
+
+		for (const folder of folders) {
+			const fullPath = `${vaultPath}/${folder}`;
+			const existing = this.app.vault.getAbstractFileByPath(fullPath);
+			if (!existing) {
+				await this.app.vault.createFolder(fullPath);
+			}
+		}
 	}
 
 	/**
