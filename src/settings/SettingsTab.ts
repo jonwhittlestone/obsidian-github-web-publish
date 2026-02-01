@@ -234,7 +234,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Vault path')
-			.setDesc('Path in your vault for this site (contains unpublished/, ready-for-publish/, etc.)')
+			.setDesc('Path in your vault for this site (contains unpublished/, ready-to-publish-scheduled/, etc.)')
 			.addText(text => text
 				.setPlaceholder('_www/sites/my-blog')
 				.setValue(site.vaultPath)
@@ -245,7 +245,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Create folder structure')
-			.setDesc('Create unpublished/, ready-for-publish/, ready-for-publish-now/, and published/ folders')
+			.setDesc('Create unpublished/, ready-to-publish-scheduled/, ready-to-publish-now/, and published/ folders')
 			.addButton(button => button
 				.setButtonText('Create folders')
 				.onClick(async () => {
@@ -394,8 +394,8 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	private async createSiteFolders(vaultPath: string): Promise<void> {
 		const folders = [
 			'unpublished',
-			'ready-for-publish',
-			'ready-for-publish-now',
+			'ready-to-publish-scheduled',
+			'ready-to-publish-now',
 			'published',
 		];
 

@@ -52,8 +52,8 @@ describe('FileWatcher', () => {
 	describe('SITE_FOLDERS constants', () => {
 		it('should have correct folder names', () => {
 			expect(SITE_FOLDERS.UNPUBLISHED).toBe('unpublished');
-			expect(SITE_FOLDERS.READY_FOR_PUBLISH).toBe('ready-for-publish');
-			expect(SITE_FOLDERS.READY_FOR_PUBLISH_NOW).toBe('ready-for-publish-now');
+			expect(SITE_FOLDERS.READY_TO_PUBLISH_SCHEDULED).toBe('ready-to-publish-scheduled');
+			expect(SITE_FOLDERS.READY_TO_PUBLISH_NOW).toBe('ready-to-publish-now');
 			expect(SITE_FOLDERS.PUBLISHED).toBe('published');
 		});
 	});
@@ -78,7 +78,7 @@ describe('FileWatcher', () => {
 			});
 
 			it('should ignore non-markdown files', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish/image.png');
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/image.png');
 				const oldPath = '_www/sites/test-site/unpublished/image.png';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -88,8 +88,8 @@ describe('FileWatcher', () => {
 		});
 
 		describe('publish triggers', () => {
-			it('should trigger schedule-publish when moving to ready-for-publish', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish/post.md');
+			it('should trigger schedule-publish when moving to ready-to-publish-scheduled', () => {
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/post.md');
 				const oldPath = '_www/sites/test-site/unpublished/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -98,8 +98,8 @@ describe('FileWatcher', () => {
 				expect(action.type === 'schedule-publish' && action.site).toBe(testSite);
 			});
 
-			it('should trigger immediate-publish when moving to ready-for-publish-now', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish-now/post.md');
+			it('should trigger immediate-publish when moving to ready-to-publish-now', () => {
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-now/post.md');
 				const oldPath = '_www/sites/test-site/unpublished/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -120,8 +120,8 @@ describe('FileWatcher', () => {
 		});
 
 		describe('update triggers', () => {
-			it('should trigger update when moving from published to ready-for-publish', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish/post.md');
+			it('should trigger update when moving from published to ready-to-publish-scheduled', () => {
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/post.md');
 				const oldPath = '_www/sites/test-site/published/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -129,8 +129,8 @@ describe('FileWatcher', () => {
 				expect(action.type).toBe('update');
 			});
 
-			it('should trigger update when moving from published to ready-for-publish-now', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish-now/post.md');
+			it('should trigger update when moving from published to ready-to-publish-now', () => {
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-now/post.md');
 				const oldPath = '_www/sites/test-site/published/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -151,7 +151,7 @@ describe('FileWatcher', () => {
 
 			it('should ignore moves to published folder (handled by plugin after PR merge)', () => {
 				const file = createMockFile('_www/sites/test-site/published/post.md');
-				const oldPath = '_www/sites/test-site/ready-for-publish/post.md';
+				const oldPath = '_www/sites/test-site/ready-to-publish-scheduled/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
 
@@ -162,7 +162,7 @@ describe('FileWatcher', () => {
 				const plugin = createMockPlugin([]);
 				const watcher = new FileWatcher(plugin as unknown as GitHubWebPublishPlugin);
 
-				const file = createMockFile('_www/sites/test-site/ready-for-publish/post.md');
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/post.md');
 				const oldPath = '_www/sites/test-site/unpublished/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -182,7 +182,7 @@ describe('FileWatcher', () => {
 
 		describe('nested file paths', () => {
 			it('should handle files in subdirectories', () => {
-				const file = createMockFile('_www/sites/test-site/ready-for-publish/2026/01/post.md');
+				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/2026/01/post.md');
 				const oldPath = '_www/sites/test-site/unpublished/drafts/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
@@ -200,7 +200,7 @@ describe('FileWatcher', () => {
 			const plugin = createMockPlugin([site1, site2]);
 			const watcher = new FileWatcher(plugin as unknown as GitHubWebPublishPlugin);
 
-			const file = createMockFile('_www/sites/site2/ready-for-publish/post.md');
+			const file = createMockFile('_www/sites/site2/ready-to-publish-scheduled/post.md');
 			const oldPath = '_www/sites/site2/unpublished/post.md';
 
 			const action = watcher.handleFileMove(file, oldPath);

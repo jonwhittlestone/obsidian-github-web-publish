@@ -33,16 +33,16 @@ Create this structure in your vault:
 ```
 _www/sites/<your-site>/
 ├── unpublished/          # Draft posts (not synced)
-├── ready-for-publish/    # Queue for scheduled publish
-├── ready-for-publish-now/ # Immediate publish
+├── ready-to-publish-scheduled/    # Queue for scheduled publish
+├── ready-to-publish-now/ # Immediate publish
 └── published/            # Archive of published posts
 ```
 
 ### Publishing Workflow
 
 1. **Write** your post in `unpublished/`
-2. **Schedule**: Move to `ready-for-publish/` (publishes at 2pm UK)
-3. **Or immediate**: Move to `ready-for-publish-now/` (publishes now)
+2. **Schedule**: Move to `ready-to-publish-scheduled/` (publishes at 2pm UK)
+3. **Or immediate**: Move to `ready-to-publish-now/` (publishes now)
 4. Post automatically moves to `published/` after success
 
 ### Unpublishing

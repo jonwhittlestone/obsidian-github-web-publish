@@ -22,8 +22,8 @@ function isTFile(file: TAbstractFile): file is TFile {
 /** Folder names within a site's vault path */
 export const SITE_FOLDERS = {
 	UNPUBLISHED: 'unpublished',
-	READY_FOR_PUBLISH: 'ready-for-publish',
-	READY_FOR_PUBLISH_NOW: 'ready-for-publish-now',
+	READY_TO_PUBLISH_SCHEDULED: 'ready-to-publish-scheduled',
+	READY_TO_PUBLISH_NOW: 'ready-to-publish-now',
 	PUBLISHED: 'published',
 } as const;
 
@@ -51,8 +51,8 @@ function getSiteFolder(
 	const firstSegment = relativePath.split('/')[0];
 
 	if (firstSegment === SITE_FOLDERS.UNPUBLISHED) return 'UNPUBLISHED';
-	if (firstSegment === SITE_FOLDERS.READY_FOR_PUBLISH) return 'READY_FOR_PUBLISH';
-	if (firstSegment === SITE_FOLDERS.READY_FOR_PUBLISH_NOW) return 'READY_FOR_PUBLISH_NOW';
+	if (firstSegment === SITE_FOLDERS.READY_TO_PUBLISH_SCHEDULED) return 'READY_TO_PUBLISH_SCHEDULED';
+	if (firstSegment === SITE_FOLDERS.READY_TO_PUBLISH_NOW) return 'READY_TO_PUBLISH_NOW';
 	if (firstSegment === SITE_FOLDERS.PUBLISHED) return 'PUBLISHED';
 
 	return null;
@@ -150,10 +150,10 @@ export class FileWatcher {
 			return { type: 'none' };
 		}
 
-		// Move from published to ready-for-publish(-now) → update (re-publish)
+		// Move from published to ready-to-publish-scheduled(-now) → update (re-publish)
 		// Check this BEFORE the general publish cases
 		if (oldFolder === 'PUBLISHED') {
-			if (newFolder === 'READY_FOR_PUBLISH' || newFolder === 'READY_FOR_PUBLISH_NOW') {
+			if (newFolder === 'READY_TO_PUBLISH_SCHEDULED' || newFolder === 'READY_TO_PUBLISH_NOW') {
 				return { type: 'update', file, site };
 			}
 			if (newFolder === 'UNPUBLISHED') {
@@ -161,13 +161,13 @@ export class FileWatcher {
 			}
 		}
 
-		// Move to ready-for-publish → schedule publish
-		if (newFolder === 'READY_FOR_PUBLISH') {
+		// Move to ready-to-publish-scheduled → schedule publish
+		if (newFolder === 'READY_TO_PUBLISH_SCHEDULED') {
 			return { type: 'schedule-publish', file, site };
 		}
 
-		// Move to ready-for-publish-now → immediate publish
-		if (newFolder === 'READY_FOR_PUBLISH_NOW') {
+		// Move to ready-to-publish-now → immediate publish
+		if (newFolder === 'READY_TO_PUBLISH_NOW') {
 			return { type: 'immediate-publish', file, site };
 		}
 
