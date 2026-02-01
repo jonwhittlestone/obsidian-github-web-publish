@@ -5,6 +5,7 @@
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type GitHubWebPublishPlugin from '../main';
+import type { SiteConfig } from './types';
 
 export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	plugin: GitHubWebPublishPlugin;
@@ -19,6 +20,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		this.renderGitHubAuthSection(containerEl);
+		this.renderSiteConfigSection(containerEl);
 		this.renderPublishingOptionsSection(containerEl);
 		this.renderUnpublishOptionsSection(containerEl);
 		this.renderActivityLogSection(containerEl);
@@ -106,6 +108,116 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 				.setName('Need help?')
 				.setDesc('See configuration-guides/github-pat-setup.md in your vault for setup instructions');
 		}
+	}
+
+	private renderSiteConfigSection(containerEl: HTMLElement): void {
+		new Setting(containerEl).setName('Site configuration').setHeading();
+
+		// Get or create the first site config
+		let site = this.plugin.settings.sites[0];
+		if (!site) {
+			site = this.createDefaultSiteConfig();
+			this.plugin.settings.sites = [site];
+		}
+
+		new Setting(containerEl)
+			.setName('Site name')
+			.setDesc('Display name for this site')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setPlaceholder('My Blog')
+				.setValue(site.name)
+				.onChange(async (value) => {
+					site.name = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('GitHub repository')
+			.setDesc('Repository in owner/repo format')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setPlaceholder('username/my-blog')
+				.setValue(site.githubRepo)
+				.onChange(async (value) => {
+					site.githubRepo = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Base branch')
+			.setDesc('Target branch for pull requests')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setPlaceholder('main')
+				.setValue(site.baseBranch)
+				.onChange(async (value) => {
+					site.baseBranch = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Vault path')
+			.setDesc('Path in your vault for this site (contains unpublished/, ready-for-publish/, etc.)')
+			.addText(text => text
+				.setPlaceholder('_www/sites/my-blog')
+				.setValue(site.vaultPath)
+				.onChange(async (value) => {
+					site.vaultPath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		// Collapsible advanced settings
+		const advancedDetails = containerEl.createEl('details', { cls: 'github-publish-advanced' });
+		advancedDetails.createEl('summary', { text: 'Advanced settings' });
+
+		new Setting(advancedDetails)
+			.setName('Posts path')
+			.setDesc('Path to posts directory in the repository')
+			.addText(text => text
+				.setPlaceholder('_posts')
+				.setValue(site.postsPath)
+				.onChange(async (value) => {
+					site.postsPath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(advancedDetails)
+			.setName('Assets path')
+			.setDesc('Path to assets directory in the repository')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setPlaceholder('assets/images')
+				.setValue(site.assetsPath)
+				.onChange(async (value) => {
+					site.assetsPath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(advancedDetails)
+			.setName('Scheduled publish label')
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setDesc('GitHub label for scheduled publish PRs')
+			.addText(text => text
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				.setPlaceholder('ready-to-publish')
+				.setValue(site.scheduledLabel)
+				.onChange(async (value) => {
+					site.scheduledLabel = value;
+					await this.plugin.saveSettings();
+				}));
+	}
+
+	private createDefaultSiteConfig(): SiteConfig {
+		return {
+			name: '',
+			githubRepo: '',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets/images',
+			scheduledLabel: 'ready-to-publish',
+			vaultPath: '',
+		};
 	}
 
 	private renderPublishingOptionsSection(containerEl: HTMLElement): void {
