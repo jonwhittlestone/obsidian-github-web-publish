@@ -21,24 +21,24 @@ export class Plugin {
 		};
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	 
 	async loadData(): Promise<unknown> {
 		return {};
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
+	 
 	async saveData(_data: unknown): Promise<void> {}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
+	 
 	addSettingTab(_settingTab: PluginSettingTab): void {}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
+	 
 	registerEvent(_event: unknown): void {}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
+	 
 	addCommand(_command: unknown): void {}
 
-	// eslint-disable-next-line @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars
+	 
 	addRibbonIcon(_icon: string, _title: string, _callback: () => void): void {}
 }
 
@@ -53,27 +53,27 @@ export class App {
 }
 
 export class Vault {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	async read(_file: TFile): Promise<string> {
 		return '';
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	async modify(_file: TFile, _content: string): Promise<void> {}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	on(_event: string, _callback: (...args: unknown[]) => void): EventRef {
 		return { id: 'mock-event' } as EventRef;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	getAbstractFileByPath(_path: string): TAbstractFile | null {
 		return null;
 	}
 }
 
 export class Workspace {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	on(_event: string, _callback: (...args: unknown[]) => void): EventRef {
 		return { id: 'mock-event' } as EventRef;
 	}
@@ -112,37 +112,37 @@ export class Modal {
 }
 
 export class Setting {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	constructor(_containerEl: HTMLElement) {}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	setName(_name: string): this {
 		return this;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	setDesc(_desc: string): this {
 		return this;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	addText(_cb: (text: TextComponent) => void): this {
 		return this;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	addToggle(_cb: (toggle: ToggleComponent) => void): this {
 		return this;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	addButton(_cb: (button: ButtonComponent) => void): this {
 		return this;
 	}
 }
 
 export class Notice {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	 
 	constructor(_message: string, _timeout?: number) {}
 }
 
@@ -161,7 +161,7 @@ export interface RequestUrlResponse {
 	json: unknown;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 export async function requestUrl(_params: RequestUrlParam): Promise<RequestUrlResponse> {
 	return {
 		status: 200,

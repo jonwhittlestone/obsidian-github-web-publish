@@ -5,7 +5,6 @@
 
 import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type GitHubWebPublishPlugin from '../main';
-import type { GitHubAuth } from './types';
 
 export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	plugin: GitHubWebPublishPlugin;
@@ -19,8 +18,6 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h1', { text: 'GitHub Web Publish Settings' });
-
 		this.renderGitHubAuthSection(containerEl);
 		this.renderPublishingOptionsSection(containerEl);
 		this.renderUnpublishOptionsSection(containerEl);
@@ -28,7 +25,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	}
 
 	private renderGitHubAuthSection(containerEl: HTMLElement): void {
-		containerEl.createEl('h2', { text: 'GitHub Authentication' });
+		new Setting(containerEl).setName('GitHub authentication').setHeading();
 
 		const auth = this.plugin.settings.githubAuth;
 
@@ -56,26 +53,18 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 					}));
 		} else {
 			// Not authenticated
-			const statusEl = containerEl.createDiv({ cls: 'setting-item' });
-			statusEl.createEl('div', {
-				cls: 'setting-item-info',
-			}).createEl('div', {
-				cls: 'setting-item-name',
-				text: '❌ Not connected',
-			});
-
-			containerEl.createEl('p', {
-				text: 'Enter a GitHub Personal Access Token (PAT) with "repo" scope to enable publishing.',
-				cls: 'setting-item-description',
-			});
+			new Setting(containerEl)
+				.setName('Connection status')
+				.setDesc('Not connected. Add a token below to enable publishing.');
 
 			const tokenInputContainer = containerEl.createDiv();
 			let tokenValue = '';
 
 			new Setting(tokenInputContainer)
-				.setName('Personal Access Token')
+				.setName('Personal access token')
 				.setDesc('Create a token at github.com/settings/tokens with "repo" scope')
 				.addText(text => text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.setPlaceholder('ghp_xxxxxxxxxxxx')
 					.setValue('')
 					.onChange(value => {
@@ -113,21 +102,14 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 					}));
 
 			// Help link
-			containerEl.createEl('p', {
-				cls: 'setting-item-description',
-			}).createEl('a', {
-				text: '📖 How to create a Personal Access Token',
-				href: '#',
-			}).onclick = (e) => {
-				e.preventDefault();
-				// Open the configuration guide in Obsidian
-				new Notice('See configuration-guides/github-pat-setup.md in your vault');
-			};
+			new Setting(containerEl)
+				.setName('Need help?')
+				.setDesc('See configuration-guides/github-pat-setup.md in your vault for setup instructions');
 		}
 	}
 
 	private renderPublishingOptionsSection(containerEl: HTMLElement): void {
-		containerEl.createEl('h2', { text: 'Publishing Options' });
+		new Setting(containerEl).setName('Publishing').setHeading();
 
 		new Setting(containerEl)
 			.setName('Move to published/ after success')
@@ -141,7 +123,8 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Add date prefix to filename')
-			.setDesc('Prepend YYYY-MM-DD to filename when publishing (required for Jekyll)')
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setDesc('Adds YYYY-MM-DD prefix when publishing (required for Jekyll)')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.addDatePrefix)
 				.onChange(async (value) => {
@@ -150,7 +133,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Open PR in browser')
+			.setName('Open pull request in browser')
 			.setDesc('Open the GitHub pull request in your browser after creation')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.openPrInBrowser)
@@ -161,7 +144,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	}
 
 	private renderUnpublishOptionsSection(containerEl: HTMLElement): void {
-		containerEl.createEl('h2', { text: 'Unpublish Options' });
+		new Setting(containerEl).setName('Unpublishing').setHeading();
 
 		new Setting(containerEl)
 			.setName('Delete assets when unpublishing')
@@ -185,7 +168,7 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	}
 
 	private renderActivityLogSection(containerEl: HTMLElement): void {
-		containerEl.createEl('h2', { text: 'Activity Log' });
+		new Setting(containerEl).setName('Activity log').setHeading();
 
 		new Setting(containerEl)
 			.setName('Enable activity log')

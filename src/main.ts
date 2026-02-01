@@ -10,6 +10,17 @@ import {
 	PluginSettings,
 } from './settings';
 
+/**
+ * Extended App interface to include the settings modal
+ * These methods exist at runtime but are not in the public API types
+ */
+interface AppWithSettings {
+	setting: {
+		open(): void;
+		openTabById(id: string): void;
+	};
+}
+
 export default class GitHubWebPublishPlugin extends Plugin {
 	settings: PluginSettings;
 
@@ -17,12 +28,12 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		await this.loadSettings();
 
 		// Add ribbon icon
-		this.addRibbonIcon('upload-cloud', 'GitHub Web Publish', () => {
+		this.addRibbonIcon('upload-cloud', 'GitHub web publish', () => {
 			if (!this.settings.githubAuth?.token) {
 				new Notice('Please configure GitHub authentication in settings');
 				return;
 			}
-			new Notice('GitHub Web Publish: Ready');
+			new Notice('GitHub web publish: ready');
 		});
 
 		// Add settings tab
@@ -47,22 +58,22 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			id: 'open-settings',
 			name: 'Open settings',
 			callback: () => {
-				// @ts-expect-error - setting property exists but not in types
-				this.app.setting.open();
-				// @ts-expect-error - openTabById exists but not in types
-				this.app.setting.openTabById(this.manifest.id);
+				const appWithSettings = this.app as unknown as AppWithSettings;
+				appWithSettings.setting.open();
+				appWithSettings.setting.openTabById(this.manifest.id);
 			},
 		});
 
-		console.log('GitHub Web Publish plugin loaded');
+		// Plugin loaded successfully
 	}
 
 	onunload() {
-		console.log('GitHub Web Publish plugin unloaded');
+		// Plugin unloaded
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const data = await this.loadData() as Partial<PluginSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
 	}
 
 	async saveSettings() {
