@@ -120,6 +120,26 @@ describe('ContentProcessor', () => {
 			);
 			expect(result.assets).toHaveLength(5);
 		});
+
+		it('should prefix asset filenames when assetPrefix is set', () => {
+			const prefixedProcessor = new ContentProcessor({
+				assetsBasePath: '/assets/images/',
+				assetPrefix: 'my-post-slug',
+			});
+			const result = prefixedProcessor.process('![[photo.png]]');
+			expect(result.content).toBe('![photo](/assets/images/my-post-slug-photo.png)');
+			expect(result.assets[0]?.targetPath).toBe('assets/images/my-post-slug-photo.png');
+			expect(result.assets[0]?.filename).toBe('photo.png'); // Original filename preserved
+		});
+
+		it('should prefix multiple assets with same prefix', () => {
+			const prefixedProcessor = new ContentProcessor({
+				assetsBasePath: '/assets/images/',
+				assetPrefix: 'post-1',
+			});
+			const result = prefixedProcessor.process('![[a.png]] ![[b.jpg]]');
+			expect(result.content).toBe('![a](/assets/images/post-1-a.png) ![b](/assets/images/post-1-b.jpg)');
+		});
 	});
 
 	describe('mixed content', () => {

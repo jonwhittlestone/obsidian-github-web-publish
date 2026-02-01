@@ -4,7 +4,7 @@
  * Handles: branch creation, file upload, PR creation, label assignment
  */
 
-import { TFile, Vault } from 'obsidian';
+import { TFile, TAbstractFile, Vault } from 'obsidian';
 import { GitHubClient } from '../github';
 import { FrontmatterValidator } from './validator';
 import { ContentProcessor } from './content-processor';
@@ -99,15 +99,16 @@ export class Publisher {
 			// Read file content
 			const rawContent = await this.vault.read(file);
 
+			// Generate slug for branch name and asset prefix
+			const slug = slugify(file.basename);
+
 			// Process content: convert wiki-links to standard markdown
 			const processor = new ContentProcessor({
 				assetsBasePath: `/${site.assetsPath}/`,
 				wikiLinkStyle: 'text', // Convert wiki-links to plain text (internal notes likely don't exist on Jekyll)
+				assetPrefix: slug, // Prefix assets with post slug to ensure uniqueness
 			});
 			const { content, assets } = processor.process(rawContent);
-
-			// Generate slug and branch name
-			const slug = slugify(file.basename);
 			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
 			const targetFilename = datePrefix ? `${datePrefix}-${slug}.md` : `${slug}.md`;
 			const branchName = `publish/${slug}`;
@@ -123,6 +124,24 @@ export class Publisher {
 				`Add post: ${file.basename}`,
 				branchName
 			);
+
+			// Upload assets (images) referenced in the content
+			for (const asset of assets) {
+				const assetFile = await this.findAssetFile(asset.filename);
+				if (assetFile) {
+					const assetContent = await this.vault.readBinary(assetFile);
+					const base64Content = this.arrayBufferToBase64(assetContent);
+					await client.createOrUpdateFile(
+						asset.targetPath,
+						base64Content,
+						`Add image: ${asset.filename}`,
+						branchName,
+						true // isBase64
+					);
+				} else {
+					console.warn(`[GitHubWebPublish] Asset not found: ${asset.filename}`);
+				}
+			}
 
 			// Create PR
 			const prTitle = `Publish: ${file.basename}`;
@@ -153,5 +172,50 @@ export class Publisher {
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			return { success: false, error: message };
 		}
+	}
+
+	/**
+	 * Find an asset file in the vault by filename
+	 * Searches common attachment locations
+	 */
+	private async findAssetFile(filename: string): Promise<TFile | null> {
+		// First, try the exact path if it looks like a path
+		if (filename.includes('/')) {
+			const file = this.vault.getAbstractFileByPath(filename);
+			if (file && this.isTFile(file)) {
+				return file;
+			}
+		}
+
+		// Search all files for a matching name
+		const allFiles = this.vault.getFiles();
+		const matchingFile = allFiles.find(f =>
+			f.name === filename ||
+			f.path.endsWith(`/${filename}`)
+		);
+
+		return matchingFile ?? null;
+	}
+
+	/**
+	 * Type guard to check if a file is a TFile
+	 */
+	private isTFile(file: TAbstractFile): file is TFile {
+		return 'extension' in file;
+	}
+
+	/**
+	 * Convert ArrayBuffer to base64 string
+	 */
+	private arrayBufferToBase64(buffer: ArrayBuffer): string {
+		const bytes = new Uint8Array(buffer);
+		const chunks: string[] = [];
+		// Process in chunks to avoid call stack issues with large files
+		const chunkSize = 8192;
+		for (let i = 0; i < bytes.length; i += chunkSize) {
+			const chunk = bytes.subarray(i, i + chunkSize);
+			chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
+		}
+		return btoa(chunks.join(''));
 	}
 }

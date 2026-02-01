@@ -13,6 +13,8 @@ export interface ContentProcessorOptions {
 	assetsBasePath: string;
 	/** How to handle internal wiki-links: 'link' converts to markdown links, 'text' strips to plain text */
 	wikiLinkStyle: 'link' | 'text';
+	/** Prefix for asset filenames to ensure uniqueness (e.g., post slug) */
+	assetPrefix?: string;
 }
 
 export interface ProcessedContent {
@@ -81,7 +83,7 @@ export class ContentProcessor {
 	}
 
 	/**
-	 * Process image embeds: ![[image.png]] → ![alt](/assets/images/image.png)
+	 * Process image embeds: ![[image.png]] → ![alt](/assets/images/prefix-image.png)
 	 */
 	private processImageEmbeds(content: string, assets: AssetReference[]): string {
 		// Match ![[filename]] or ![[filename|alt]]
@@ -98,8 +100,14 @@ export class ContentProcessor {
 			// Use alt text if provided, otherwise use filename without extension
 			const altText = alt?.trim() || getBasename(filenameOnly);
 
+			// Add prefix to filename to ensure uniqueness
+			const uniqueFilename = this.options.assetPrefix
+				? `${this.options.assetPrefix}-${filenameOnly}`
+				: filenameOnly;
+
 			// Build the target path
-			const targetPath = `${this.options.assetsBasePath.replace(/^\//, '').replace(/\/$/, '')}/${filenameOnly}`;
+			const assetsBase = this.options.assetsBasePath.replace(/^\//, '').replace(/\/$/, '');
+			const targetPath = `${assetsBase}/${uniqueFilename}`;
 
 			// Track the asset for upload
 			assets.push({

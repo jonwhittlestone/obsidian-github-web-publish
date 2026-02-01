@@ -121,17 +121,31 @@ export class GitHubClient {
 
 	/**
 	 * Create or update a file in the repository
+	 *
+	 * @param path Path in the repo
+	 * @param content File content (text or base64-encoded binary)
+	 * @param message Commit message
+	 * @param branch Target branch
+	 * @param isBase64 If true, content is already base64-encoded (for binary files)
 	 */
 	async createOrUpdateFile(
 		path: string,
 		content: string,
 		message: string,
-		branch: string
+		branch: string,
+		isBase64 = false
 	): Promise<CreateFileResult> {
-		// Base64 encode the content (handles UTF-8 properly)
-		const encoder = new TextEncoder();
-		const bytes = encoder.encode(content);
-		const encodedContent = btoa(String.fromCharCode(...bytes));
+		let encodedContent: string;
+
+		if (isBase64) {
+			// Content is already base64-encoded (binary files like images)
+			encodedContent = content;
+		} else {
+			// Base64 encode the text content (handles UTF-8 properly)
+			const encoder = new TextEncoder();
+			const bytes = encoder.encode(content);
+			encodedContent = btoa(String.fromCharCode(...bytes));
+		}
 
 		interface FileResponse {
 			content: { sha: string; path: string };
