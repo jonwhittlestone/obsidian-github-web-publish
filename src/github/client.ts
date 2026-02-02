@@ -105,6 +105,18 @@ export class GitHubClient {
 	}
 
 	/**
+	 * Check if a branch exists
+	 */
+	async branchExists(branchName: string): Promise<boolean> {
+		try {
+			await this.getBranchSha(branchName);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
 	 * Create a new branch from a base branch
 	 */
 	async createBranch(branchName: string, baseBranch: string): Promise<CreateBranchResult> {
@@ -130,6 +142,23 @@ export class GitHubClient {
 			ref: data.ref,
 			sha: data.object.sha,
 		};
+	}
+
+	/**
+	 * Create a fresh branch, deleting any existing branch with the same name first.
+	 * Use this for publish/update operations to handle retry scenarios.
+	 */
+	async ensureFreshBranch(branchName: string, baseBranch: string): Promise<CreateBranchResult> {
+		// Delete existing branch if it exists (cleanup from failed attempts)
+		if (await this.branchExists(branchName)) {
+			try {
+				await this.deleteBranch(branchName);
+			} catch {
+				// Ignore deletion errors - branch might be protected or already gone
+			}
+		}
+
+		return this.createBranch(branchName, baseBranch);
 	}
 
 	/**

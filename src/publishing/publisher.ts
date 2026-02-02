@@ -152,7 +152,7 @@ export class Publisher {
 			const branchName = `publish/${slug}`;
 
 			// Create branch
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
 
 			// Upload file to _posts (or configured posts path)
 			const targetPath = `${site.postsPath}/${targetFilename}`;
@@ -317,7 +317,7 @@ export class Publisher {
 			}
 
 			// Create branch
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
 
 			// Get the existing file's SHA from the new branch
 			const existingFile = await client.getFile(existingPost.path, branchName);
@@ -618,7 +618,7 @@ export class Publisher {
 			}
 
 			// Create branch for unpublish
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
 
 			const deletedFiles: string[] = [];
 
