@@ -242,4 +242,62 @@ export class GitHubClient {
 			{ method: 'DELETE' }
 		);
 	}
+
+	/**
+	 * List files in a directory
+	 */
+	async listFiles(path: string, branch?: string): Promise<Array<{ name: string; path: string; sha: string }>> {
+		interface ContentItem {
+			name: string;
+			path: string;
+			sha: string;
+			type: string;
+		}
+
+		const ref = branch ? `?ref=${branch}` : '';
+		const data = await this.request<ContentItem[]>(
+			`/repos/${this.owner}/${this.repo}/contents/${path}${ref}`
+		);
+
+		return data
+			.filter(item => item.type === 'file')
+			.map(item => ({ name: item.name, path: item.path, sha: item.sha }));
+	}
+
+	/**
+	 * Delete a file from the repository
+	 */
+	async deleteFile(path: string, message: string, branch: string, sha: string): Promise<void> {
+		await this.request(
+			`/repos/${this.owner}/${this.repo}/contents/${path}`,
+			{
+				method: 'DELETE',
+				body: {
+					message,
+					sha,
+					branch,
+				},
+			}
+		);
+	}
+
+	/**
+	 * Get file info (including SHA) from the repository
+	 */
+	async getFile(path: string, branch?: string): Promise<{ sha: string; content: string } | null> {
+		interface FileResponse {
+			sha: string;
+			content: string;
+		}
+
+		try {
+			const ref = branch ? `?ref=${branch}` : '';
+			const data = await this.request<FileResponse>(
+				`/repos/${this.owner}/${this.repo}/contents/${path}${ref}`
+			);
+			return { sha: data.sha, content: data.content };
+		} catch {
+			return null;
+		}
+	}
 }

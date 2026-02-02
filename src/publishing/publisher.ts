@@ -22,6 +22,12 @@ export interface PublishResult {
 	assets?: AssetReference[];
 }
 
+export interface UnpublishResult {
+	success: boolean;
+	deletedFiles: string[];
+	error?: string;
+}
+
 /**
  * Generate a URL-safe slug from a filename
  */
@@ -217,5 +223,118 @@ export class Publisher {
 			chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
 		}
 		return btoa(chunks.join(''));
+	}
+
+	/**
+	 * Unpublish a file from GitHub
+	 *
+	 * @param file The file being unpublished
+	 * @param site The site configuration
+	 * @param deleteAssets If true, also delete associated assets
+	 */
+	async unpublish(file: TFile, site: SiteConfig, deleteAssets: boolean): Promise<UnpublishResult> {
+		// Validate we have auth
+		if (!this.settings.githubAuth?.token) {
+			return { success: false, deletedFiles: [], error: 'Not authenticated with GitHub' };
+		}
+
+		// Parse owner/repo from site config
+		const [owner, repo] = site.githubRepo.split('/');
+		if (!owner || !repo) {
+			return { success: false, deletedFiles: [], error: 'Invalid repository format. Expected owner/repo' };
+		}
+
+		// Create GitHub client
+		const client = new GitHubClient({
+			token: this.settings.githubAuth.token,
+			owner,
+			repo,
+		});
+
+		try {
+			// Generate slug from filename
+			const slug = slugify(file.basename);
+			const branchName = `unpublish/${slug}`;
+
+			// List files in _posts to find matching post
+			const postsFiles = await client.listFiles(site.postsPath, site.baseBranch);
+
+			// Find files matching the slug pattern (YYYY-MM-DD-slug.md or just slug.md)
+			const matchingPosts = postsFiles.filter(f => {
+				const nameWithoutExt = f.name.replace(/\.md$/, '');
+				// Match exact slug or date-prefixed slug
+				return nameWithoutExt === slug ||
+					   nameWithoutExt.match(new RegExp(`^\\d{4}-\\d{2}-\\d{2}-${slug}$`));
+			});
+
+			if (matchingPosts.length === 0) {
+				return {
+					success: false,
+					deletedFiles: [],
+					error: `No published post found matching "${slug}" in ${site.postsPath}/`
+				};
+			}
+
+			// Create branch for unpublish
+			await client.createBranch(branchName, site.baseBranch);
+
+			const deletedFiles: string[] = [];
+
+			// Delete matching post files
+			for (const post of matchingPosts) {
+				await client.deleteFile(
+					post.path,
+					`Remove post: ${post.name}`,
+					branchName,
+					post.sha
+				);
+				deletedFiles.push(post.path);
+			}
+
+			// Optionally delete associated assets
+			if (deleteAssets) {
+				try {
+					const assetsFiles = await client.listFiles(site.assetsPath, branchName);
+					// Find assets that start with the slug (our naming convention)
+					const matchingAssets = assetsFiles.filter(f => f.name.startsWith(`${slug}-`));
+
+					for (const asset of matchingAssets) {
+						await client.deleteFile(
+							asset.path,
+							`Remove asset: ${asset.name}`,
+							branchName,
+							asset.sha
+						);
+						deletedFiles.push(asset.path);
+					}
+				} catch {
+					// Assets directory might not exist or be empty, continue
+					console.debug('[GitHubWebPublish] Could not list/delete assets, continuing');
+				}
+			}
+
+			// Create PR
+			const prTitle = `Unpublish: ${file.basename}`;
+			const prBody = `Removing "${file.basename}" from ${site.name}.\n\nDeleted files:\n${deletedFiles.map(f => `- ${f}`).join('\n')}\n\nCreated by Obsidian GitHub Web Publish plugin.`;
+			const pr = await client.createPullRequest(prTitle, branchName, site.baseBranch, prBody);
+
+			// Merge immediately (unpublish is always immediate)
+			await client.mergePullRequest(pr.number, prTitle);
+
+			// Clean up branch
+			try {
+				await client.deleteBranch(branchName);
+			} catch {
+				// Branch deletion can fail if GitHub auto-deleted it
+			}
+
+			return {
+				success: true,
+				deletedFiles,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			return { success: false, deletedFiles: [], error: message };
+		}
 	}
 }
