@@ -70,8 +70,21 @@ export class GitHubClient {
 		});
 
 		if (response.status < 200 || response.status >= 300) {
-			const error = response.json as { message?: string };
-			throw new Error(`GitHub API error (${response.status}): ${error.message || 'Unknown error'}`);
+			const error = response.json as {
+				message?: string;
+				errors?: Array<{ resource?: string; code?: string; field?: string; message?: string }>;
+			};
+
+			// Build detailed error message including any errors array
+			let errorMessage = error.message || 'Unknown error';
+			if (error.errors && error.errors.length > 0) {
+				const details = error.errors
+					.map(e => e.message || `${e.resource}.${e.field}: ${e.code}`)
+					.join('; ');
+				errorMessage += ` - ${details}`;
+			}
+
+			throw new Error(`GitHub API error (${response.status}): ${errorMessage}`);
 		}
 
 		return response.json as T;
