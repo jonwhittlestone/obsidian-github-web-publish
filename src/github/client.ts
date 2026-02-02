@@ -57,37 +57,48 @@ export class GitHubClient {
 	): Promise<T> {
 		const url = endpoint.startsWith('http') ? endpoint : `${GITHUB_API_BASE}${endpoint}`;
 
-		const response = await requestUrl({
-			url,
-			method: options.method || 'GET',
-			headers: {
-				'Authorization': `Bearer ${this.token}`,
-				'Accept': 'application/vnd.github+json',
-				'X-GitHub-Api-Version': '2022-11-28',
-				'Content-Type': 'application/json',
-			},
-			body: options.body ? JSON.stringify(options.body) : undefined,
-		});
+		try {
+			const response = await requestUrl({
+				url,
+				method: options.method || 'GET',
+				headers: {
+					'Authorization': `Bearer ${this.token}`,
+					'Accept': 'application/vnd.github+json',
+					'X-GitHub-Api-Version': '2022-11-28',
+					'Content-Type': 'application/json',
+				},
+				body: options.body ? JSON.stringify(options.body) : undefined,
+				throw: false, // Don't throw on non-2xx, let us handle it
+			});
 
-		if (response.status < 200 || response.status >= 300) {
-			const error = response.json as {
-				message?: string;
-				errors?: Array<{ resource?: string; code?: string; field?: string; message?: string }>;
-			};
+			if (response.status < 200 || response.status >= 300) {
+				const error = response.json as {
+					message?: string;
+					errors?: Array<{ resource?: string; code?: string; field?: string; message?: string }>;
+				};
 
-			// Build detailed error message including any errors array
-			let errorMessage = error.message || 'Unknown error';
-			if (error.errors && error.errors.length > 0) {
-				const details = error.errors
-					.map(e => e.message || `${e.resource}.${e.field}: ${e.code}`)
-					.join('; ');
-				errorMessage += ` - ${details}`;
+				// Build detailed error message including any errors array
+				let errorMessage = error?.message || 'Unknown error';
+				if (error?.errors && error.errors.length > 0) {
+					const details = error.errors
+						.map(e => e.message || `${e.resource}.${e.field}: ${e.code}`)
+						.join('; ');
+					errorMessage += ` - ${details}`;
+				}
+
+				throw new Error(`GitHub API error (${response.status}): ${errorMessage}`);
 			}
 
-			throw new Error(`GitHub API error (${response.status}): ${errorMessage}`);
+			return response.json as T;
+		} catch (e) {
+			// Re-throw our own errors
+			if (e instanceof Error && e.message.startsWith('GitHub API error')) {
+				throw e;
+			}
+			// Handle Obsidian's requestUrl errors (thrown for network issues, etc.)
+			const message = e instanceof Error ? e.message : 'Unknown error';
+			throw new Error(`GitHub API request failed: ${message}`);
 		}
-
-		return response.json as T;
 	}
 
 	/**
