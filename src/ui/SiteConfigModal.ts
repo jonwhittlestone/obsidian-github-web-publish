@@ -25,6 +25,7 @@ export function createDefaultSiteConfig(): SiteConfig {
 		assetsPath: 'assets/images',
 		scheduledLabel: 'ready-to-publish',
 		vaultPath: '',
+		siteBaseUrl: '',
 	};
 }
 
@@ -115,6 +116,19 @@ export class SiteConfigModal extends Modal {
 				text.setValue(this.site.baseBranch);
 				text.onChange(value => {
 					this.site.baseBranch = value;
+					this.hasChanges = true;
+				});
+			});
+
+		// Site base URL
+		new Setting(contentEl)
+			.setName('Site URL')
+			.setDesc('Base URL of your published site (for activity log links)')
+			.addText(text => {
+				text.inputEl.placeholder = 'https://username.github.io/blog';
+				text.setValue(this.site.siteBaseUrl || '');
+				text.onChange(value => {
+					this.site.siteBaseUrl = value;
 					this.hasChanges = true;
 				});
 			});

@@ -46,6 +46,7 @@ export interface LogEntry {
 	filename: string;
 	prNumber?: number;
 	prUrl?: string;
+	liveUrl?: string;
 	error?: string;
 	details?: string;
 }
@@ -168,6 +169,10 @@ date: 2026-01-15
 		let text = `### ${time} - ${icon} ${label}\n`;
 		text += `- **Post**: ${entry.postTitle}\n`;
 		text += `- **File**: \`${entry.filename}\`\n`;
+
+		if (entry.liveUrl) {
+			text += `- **Live**: [View post](${entry.liveUrl})\n`;
+		}
 
 		if (entry.prNumber) {
 			if (entry.prUrl) {

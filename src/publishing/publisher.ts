@@ -16,6 +16,8 @@ export interface PublishResult {
 	success: boolean;
 	prNumber?: number;
 	prUrl?: string;
+	/** Live URL of the published post */
+	liveUrl?: string;
 	error?: string;
 	validationResult?: ValidationResult;
 	/** Assets referenced in the content (for future upload) */
@@ -168,10 +170,20 @@ export class Publisher {
 				await client.addLabels(pr.number, [site.scheduledLabel]);
 			}
 
+			// Generate live URL if site base URL is configured
+			let liveUrl: string | undefined;
+			if (site.siteBaseUrl && datePrefix) {
+				// Jekyll permalink format: /YYYY/MM/DD/slug/
+				const [year, month, day] = datePrefix.split('-');
+				const baseUrl = site.siteBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+				liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}/`;
+			}
+
 			return {
 				success: true,
 				prNumber: pr.number,
 				prUrl: pr.html_url,
+				liveUrl,
 				assets,
 			};
 		} catch (error) {

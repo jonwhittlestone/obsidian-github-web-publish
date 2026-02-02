@@ -2,10 +2,12 @@
  * Publisher tests - testing publish and unpublish workflows
  */
 
+/* eslint-disable obsidianmd/no-tfile-tfolder-cast */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Publisher } from '../src/publishing/publisher';
 import type { PluginSettings, SiteConfig } from '../src/settings/types';
-import type { TFile, Vault } from 'obsidian';
+import type { TFile, Vault, RequestUrlResponse } from 'obsidian';
 
 // Mock requestUrl at module level
 vi.mock('obsidian', () => ({
@@ -15,6 +17,17 @@ vi.mock('obsidian', () => ({
 import { requestUrl } from 'obsidian';
 
 const mockRequestUrl = vi.mocked(requestUrl);
+
+/** Helper to create mock API responses */
+function mockResponse(status: number, json: unknown): RequestUrlResponse {
+	return {
+		status,
+		json,
+		headers: {},
+		text: JSON.stringify(json),
+		arrayBuffer: new ArrayBuffer(0),
+	};
+}
 
 describe('Publisher', () => {
 	let publisher: Publisher;
@@ -87,15 +100,7 @@ describe('Publisher', () => {
 		});
 
 		it('should return error if no matching post found', async () => {
-			// Mock listFiles to return empty array
-			mockRequestUrl
-				.mockResolvedValueOnce({
-					// List files in _posts - empty
-					status: 200,
-					json: [],
-					headers: {},
-					text: '[]',
-				});
+			mockRequestUrl.mockResolvedValueOnce(mockResponse(200, []));
 
 			const result = await publisher.unpublish(mockFile, mockSite, false);
 
@@ -104,59 +109,16 @@ describe('Publisher', () => {
 		});
 
 		it('should successfully unpublish a post', async () => {
-			// Setup mock responses for the full unpublish flow
 			mockRequestUrl
-				// 1. List files in _posts
-				.mockResolvedValueOnce({
-					status: 200,
-					json: [
-						{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'abc123', type: 'file' },
-					],
-					headers: {},
-					text: '',
-				})
-				// 2. Get branch SHA for creating new branch
-				.mockResolvedValueOnce({
-					status: 200,
-					json: { object: { sha: 'main-sha-123' } },
-					headers: {},
-					text: '',
-				})
-				// 3. Create branch
-				.mockResolvedValueOnce({
-					status: 201,
-					json: { ref: 'refs/heads/unpublish/test-post', object: { sha: 'branch-sha' } },
-					headers: {},
-					text: '',
-				})
-				// 4. Delete file
-				.mockResolvedValueOnce({
-					status: 200,
-					json: { commit: { sha: 'commit-sha' } },
-					headers: {},
-					text: '',
-				})
-				// 5. Create PR
-				.mockResolvedValueOnce({
-					status: 201,
-					json: { number: 42, html_url: 'https://github.com/testowner/testrepo/pull/42', title: 'Unpublish: test-post' },
-					headers: {},
-					text: '',
-				})
-				// 6. Merge PR
-				.mockResolvedValueOnce({
-					status: 200,
-					json: { merged: true },
-					headers: {},
-					text: '',
-				})
-				// 7. Delete branch
-				.mockResolvedValueOnce({
-					status: 204,
-					json: {},
-					headers: {},
-					text: '',
-				});
+				.mockResolvedValueOnce(mockResponse(200, [
+					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'abc123', type: 'file' },
+				]))
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha-123' } }))
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/unpublish/test-post', object: { sha: 'branch-sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, { commit: { sha: 'commit-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { number: 42, html_url: 'https://github.com/testowner/testrepo/pull/42', title: 'Unpublish: test-post' }))
+				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+				.mockResolvedValueOnce(mockResponse(204, {}));
 
 			const result = await publisher.unpublish(mockFile, mockSite, false);
 
@@ -165,31 +127,23 @@ describe('Publisher', () => {
 		});
 
 		it('should match posts with date prefix pattern', async () => {
-			// Test that various date-prefixed filenames are matched correctly
 			mockRequestUrl
-				.mockResolvedValueOnce({
-					status: 200,
-					json: [
-						{ name: '2025-01-15-test-post.md', path: '_posts/2025-01-15-test-post.md', sha: 'sha1', type: 'file' },
-						{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'sha2', type: 'file' },
-						{ name: 'other-post.md', path: '_posts/other-post.md', sha: 'sha3', type: 'file' },
-					],
-					headers: {},
-					text: '',
-				})
-				// Remaining mocks for the flow
-				.mockResolvedValueOnce({ status: 200, json: { object: { sha: 'main-sha' } }, headers: {}, text: '' })
-				.mockResolvedValueOnce({ status: 201, json: { ref: 'refs/heads/unpublish/test-post', object: { sha: 'sha' } }, headers: {}, text: '' })
-				.mockResolvedValueOnce({ status: 200, json: {}, headers: {}, text: '' }) // Delete file 1
-				.mockResolvedValueOnce({ status: 200, json: {}, headers: {}, text: '' }) // Delete file 2
-				.mockResolvedValueOnce({ status: 201, json: { number: 1, html_url: 'url', title: 'title' }, headers: {}, text: '' })
-				.mockResolvedValueOnce({ status: 200, json: { merged: true }, headers: {}, text: '' })
-				.mockResolvedValueOnce({ status: 204, json: {}, headers: {}, text: '' });
+				.mockResolvedValueOnce(mockResponse(200, [
+					{ name: '2025-01-15-test-post.md', path: '_posts/2025-01-15-test-post.md', sha: 'sha1', type: 'file' },
+					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'sha2', type: 'file' },
+					{ name: 'other-post.md', path: '_posts/other-post.md', sha: 'sha3', type: 'file' },
+				]))
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/unpublish/test-post', object: { sha: 'sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, {}))
+				.mockResolvedValueOnce(mockResponse(200, {}))
+				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'url', title: 'title' }))
+				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+				.mockResolvedValueOnce(mockResponse(204, {}));
 
 			const result = await publisher.unpublish(mockFile, mockSite, false);
 
 			expect(result.success).toBe(true);
-			// Should match both date-prefixed versions of test-post
 			expect(result.deletedFiles).toHaveLength(2);
 			expect(result.deletedFiles).toContain('_posts/2025-01-15-test-post.md');
 			expect(result.deletedFiles).toContain('_posts/2026-02-01-test-post.md');
@@ -197,42 +151,22 @@ describe('Publisher', () => {
 
 		it('should delete assets when deleteAssets is true', async () => {
 			mockRequestUrl
-				// 1. List files in _posts
-				.mockResolvedValueOnce({
-					status: 200,
-					json: [
-						{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'post-sha', type: 'file' },
-					],
-					headers: {},
-					text: '',
-				})
-				// 2. Get branch SHA
-				.mockResolvedValueOnce({ status: 200, json: { object: { sha: 'main-sha' } }, headers: {}, text: '' })
-				// 3. Create branch
-				.mockResolvedValueOnce({ status: 201, json: { ref: 'ref', object: { sha: 'sha' } }, headers: {}, text: '' })
-				// 4. Delete post file
-				.mockResolvedValueOnce({ status: 200, json: {}, headers: {}, text: '' })
-				// 5. List assets
-				.mockResolvedValueOnce({
-					status: 200,
-					json: [
-						{ name: 'test-post-image1.png', path: 'assets/images/test-post-image1.png', sha: 'asset-sha-1', type: 'file' },
-						{ name: 'test-post-image2.jpg', path: 'assets/images/test-post-image2.jpg', sha: 'asset-sha-2', type: 'file' },
-						{ name: 'other-image.png', path: 'assets/images/other-image.png', sha: 'other-sha', type: 'file' },
-					],
-					headers: {},
-					text: '',
-				})
-				// 6. Delete asset 1
-				.mockResolvedValueOnce({ status: 200, json: {}, headers: {}, text: '' })
-				// 7. Delete asset 2
-				.mockResolvedValueOnce({ status: 200, json: {}, headers: {}, text: '' })
-				// 8. Create PR
-				.mockResolvedValueOnce({ status: 201, json: { number: 1, html_url: 'url', title: 'title' }, headers: {}, text: '' })
-				// 9. Merge PR
-				.mockResolvedValueOnce({ status: 200, json: { merged: true }, headers: {}, text: '' })
-				// 10. Delete branch
-				.mockResolvedValueOnce({ status: 204, json: {}, headers: {}, text: '' });
+				.mockResolvedValueOnce(mockResponse(200, [
+					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'post-sha', type: 'file' },
+				]))
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'ref', object: { sha: 'sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, {}))
+				.mockResolvedValueOnce(mockResponse(200, [
+					{ name: 'test-post-image1.png', path: 'assets/images/test-post-image1.png', sha: 'asset-sha-1', type: 'file' },
+					{ name: 'test-post-image2.jpg', path: 'assets/images/test-post-image2.jpg', sha: 'asset-sha-2', type: 'file' },
+					{ name: 'other-image.png', path: 'assets/images/other-image.png', sha: 'other-sha', type: 'file' },
+				]))
+				.mockResolvedValueOnce(mockResponse(200, {}))
+				.mockResolvedValueOnce(mockResponse(200, {}))
+				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'url', title: 'title' }))
+				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+				.mockResolvedValueOnce(mockResponse(204, {}));
 
 			const result = await publisher.unpublish(mockFile, mockSite, true);
 
@@ -240,7 +174,6 @@ describe('Publisher', () => {
 			expect(result.deletedFiles).toContain('_posts/2026-02-01-test-post.md');
 			expect(result.deletedFiles).toContain('assets/images/test-post-image1.png');
 			expect(result.deletedFiles).toContain('assets/images/test-post-image2.jpg');
-			// Should NOT include other-image.png (doesn't match slug prefix)
 			expect(result.deletedFiles).not.toContain('assets/images/other-image.png');
 		});
 
@@ -256,7 +189,6 @@ describe('Publisher', () => {
 });
 
 describe('slugify', () => {
-	// Test the slugify function indirectly through unpublish behavior
 	it('should generate correct slugs for various filenames', async () => {
 		const mockVault = {
 			read: vi.fn(),
@@ -286,7 +218,6 @@ describe('slugify', () => {
 
 		const publisher = new Publisher(mockVault, mockSettings);
 
-		// Test with a file that has spaces and special characters
 		const testFile = {
 			path: 'test/My Post Title!.md',
 			name: 'My Post Title!.md',
@@ -294,16 +225,10 @@ describe('slugify', () => {
 			extension: 'md',
 		} as TFile;
 
-		mockRequestUrl.mockResolvedValueOnce({
-			status: 200,
-			json: [],
-			headers: {},
-			text: '',
-		});
+		mockRequestUrl.mockResolvedValueOnce(mockResponse(200, []));
 
 		const result = await publisher.unpublish(testFile, mockSite, false);
 
-		// The error message should contain the slugified version
 		expect(result.error).toContain('my-post-title');
 	});
 });

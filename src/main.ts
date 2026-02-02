@@ -265,6 +265,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			filename: file.name,
 			prNumber: result.prNumber,
 			prUrl: result.prUrl,
+			liveUrl: result.liveUrl,
 			error: result.error,
 		});
 
