@@ -15,6 +15,8 @@ export interface ContentProcessorOptions {
 	wikiLinkStyle: 'link' | 'text';
 	/** Prefix for asset filenames to ensure uniqueness (e.g., post slug) */
 	assetPrefix?: string;
+	/** Site base path for Jekyll sites with baseurl (e.g., '/notes') */
+	siteBasePath?: string;
 }
 
 export interface ProcessedContent {
@@ -105,7 +107,7 @@ export class ContentProcessor {
 				? `${this.options.assetPrefix}-${filenameOnly}`
 				: filenameOnly;
 
-			// Build the target path
+			// Build the target path (for uploading to repo)
 			const assetsBase = this.options.assetsBasePath.replace(/^\//, '').replace(/\/$/, '');
 			const targetPath = `${assetsBase}/${uniqueFilename}`;
 
@@ -116,8 +118,12 @@ export class ContentProcessor {
 				targetPath,
 			});
 
+			// Build the URL path (includes site base path for Jekyll sites with baseurl)
+			const siteBase = this.options.siteBasePath?.replace(/\/$/, '') || '';
+			const urlPath = `${siteBase}/${targetPath}`;
+
 			// Return standard markdown image
-			return `![${altText}](/${targetPath})`;
+			return `![${altText}](${urlPath})`;
 		});
 	}
 

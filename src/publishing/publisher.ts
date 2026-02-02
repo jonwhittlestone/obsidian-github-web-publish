@@ -69,6 +69,19 @@ function getTodayDate(): string {
 }
 
 /**
+ * Extract the base path from a site URL (e.g., 'https://example.com/notes' → '/notes')
+ */
+function getSiteBasePath(siteBaseUrl?: string): string {
+	if (!siteBaseUrl) return '';
+	try {
+		const url = new URL(siteBaseUrl);
+		return url.pathname.replace(/\/$/, '') || '';
+	} catch {
+		return '';
+	}
+}
+
+/**
  * Publisher handles the GitHub publish workflow
  */
 export class Publisher {
@@ -131,6 +144,7 @@ export class Publisher {
 				assetsBasePath: `/${site.assetsPath}/`,
 				wikiLinkStyle: 'text', // Convert wiki-links to plain text (internal notes likely don't exist on Jekyll)
 				assetPrefix: slug, // Prefix assets with post slug to ensure uniqueness
+				siteBasePath: getSiteBasePath(site.siteBaseUrl), // For Jekyll sites with baseurl
 			});
 			const { content, assets } = processor.process(rawContent);
 			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
@@ -273,6 +287,7 @@ export class Publisher {
 				assetsBasePath: `/${site.assetsPath}/`,
 				wikiLinkStyle: 'text',
 				assetPrefix: slug,
+				siteBasePath: getSiteBasePath(site.siteBaseUrl),
 			});
 			const { content, assets } = processor.process(rawContent);
 			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
