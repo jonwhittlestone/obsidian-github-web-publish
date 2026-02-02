@@ -173,10 +173,18 @@ export class Publisher {
 			// Generate live URL if site base URL is configured
 			let liveUrl: string | undefined;
 			if (site.siteBaseUrl && datePrefix) {
-				// Jekyll permalink format: /YYYY/MM/DD/slug/
+				// Jekyll permalink format: /:categories/:year/:month/:day/:title.html
 				const [year, month, day] = datePrefix.split('-');
 				const baseUrl = site.siteBaseUrl.replace(/\/$/, ''); // Remove trailing slash
-				liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}/`;
+
+				// Extract category from frontmatter for URL
+				const category = this.extractCategoryFromContent(rawContent);
+				if (category) {
+					liveUrl = `${baseUrl}/${category}/${year}/${month}/${day}/${slug}.html`;
+				} else {
+					// Fallback without category
+					liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}.html`;
+				}
 			}
 
 			return {
@@ -235,6 +243,36 @@ export class Publisher {
 			chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
 		}
 		return btoa(chunks.join(''));
+	}
+
+	/**
+	 * Extract the first category from frontmatter for URL generation
+	 * Handles both array and string formats
+	 */
+	private extractCategoryFromContent(content: string): string | null {
+		// Match frontmatter
+		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+		if (!frontmatterMatch || !frontmatterMatch[1]) return null;
+
+		const frontmatter = frontmatterMatch[1];
+
+		// Try to match categories array format: categories:\n  - category1
+		const arrayMatch = frontmatter.match(/categories:\s*\n\s*-\s*(.+)/);
+		if (arrayMatch && arrayMatch[1]) {
+			return arrayMatch[1].trim().toLowerCase().replace(/\s+/g, '%20');
+		}
+
+		// Try to match single category format: categories: category1
+		const singleMatch = frontmatter.match(/categories:\s*(.+)/);
+		if (singleMatch && singleMatch[1]) {
+			const value = singleMatch[1].trim();
+			// Skip if it's an array indicator
+			if (!value.startsWith('-') && !value.startsWith('[')) {
+				return value.toLowerCase().replace(/\s+/g, '%20');
+			}
+		}
+
+		return null;
 	}
 
 	/**
