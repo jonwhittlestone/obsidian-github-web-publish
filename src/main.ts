@@ -63,7 +63,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 						action.type === 'immediate-publish'
 					);
 				} else if (action.type === 'unpublish') {
-					new Notice(`Unpublishing: ${file.name} (not yet implemented)`);
+					void this.handleUnpublish(action.file, action.site);
 				} else if (action.type === 'update') {
 					new Notice(`Updating: ${file.name} (not yet implemented)`);
 				}
@@ -223,6 +223,18 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	}
 
 	/**
+	 * Move a file to the published folder after successful publish
+	 */
+	private async moveToPublished(file: TFile, site: SiteConfig): Promise<void> {
+		const publishedPath = `${site.vaultPath}/published/${file.name}`;
+		try {
+			await this.app.fileManager.renameFile(file, publishedPath);
+		} catch (e) {
+			console.error('[GitHubWebPublish] Failed to move file to published:', e);
+		}
+	}
+
+	/**
 	 * Handle publishing a file to GitHub
 	 */
 	private async handlePublish(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
@@ -265,6 +277,11 @@ export default class GitHubWebPublishPlugin extends Plugin {
 				new Notice(`Scheduled for publish: ${file.name}\nPR #${result.prNumber}`);
 			}
 
+			// Move to published/ if setting enabled
+			if (this.settings.moveAfterPublish) {
+				await this.moveToPublished(file, site);
+			}
+
 			// Open PR in browser if setting enabled
 			if (this.settings.openPrInBrowser && result.prUrl) {
 				window.open(result.prUrl, '_blank');
@@ -289,6 +306,43 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			} else {
 				new Notice(`Failed to publish: ${result.error}`);
 			}
+		}
+	}
+
+	/**
+	 * Handle unpublishing a file from GitHub
+	 */
+	private async handleUnpublish(file: TFile, site: SiteConfig): Promise<void> {
+		new Notice(`Unpublishing: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.unpublish(
+			file,
+			site,
+			this.settings.deleteAssetsOnUnpublish
+		);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+		await log.log({
+			status: result.success ? 'unpublished' : 'failed',
+			postTitle: file.basename,
+			filename: file.name,
+			details: result.success
+				? `Deleted: ${result.deletedFiles.join(', ')}`
+				: undefined,
+			error: result.error,
+		});
+
+		if (result.success) {
+			this.statusBar.setState('success');
+			new Notice(`Unpublished: ${file.name}\nDeleted ${result.deletedFiles.length} file(s)`);
+		} else {
+			this.statusBar.setState('error');
+			new Notice(`Failed to unpublish: ${result.error}`);
 		}
 	}
 }
