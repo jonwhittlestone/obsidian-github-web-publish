@@ -9,6 +9,73 @@ import { requestUrl } from 'obsidian';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
+/** Default retry configuration */
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_BASE_DELAY_MS = 1000;
+const DEFAULT_MAX_DELAY_MS = 10000;
+
+/**
+ * HTTP status codes that are safe to retry
+ */
+function isRetryableStatusCode(status: number): boolean {
+	// Retry on rate limits and server errors
+	return status === 429 || (status >= 500 && status < 600);
+}
+
+/**
+ * Check if an error is retryable (network issues, rate limits, server errors)
+ */
+function isRetryableError(error: unknown): boolean {
+	if (error instanceof Error) {
+		const message = error.message.toLowerCase();
+
+		// Check for retryable status codes in API errors (429, 5xx)
+		const statusMatch = error.message.match(/GitHub API error \((\d+)\)/);
+		if (statusMatch && statusMatch[1]) {
+			const status = parseInt(statusMatch[1], 10);
+			return isRetryableStatusCode(status);
+		}
+
+		// Only retry network errors that indicate transient failures
+		// These are the kinds of errors requestUrl throws for actual network issues
+		const networkErrorPatterns = [
+			'timeout',
+			'timed out',
+			'econnreset',
+			'econnrefused',
+			'enetunreach',
+			'enotfound',
+			'socket hang up',
+			'network error',
+			'fetch failed',
+			'failed to fetch',
+		];
+		if (networkErrorPatterns.some(pattern => message.includes(pattern))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Calculate delay with exponential backoff and jitter
+ */
+function calculateBackoffDelay(attempt: number, baseDelay: number, maxDelay: number): number {
+	// Exponential backoff: baseDelay * 2^attempt
+	const exponentialDelay = baseDelay * Math.pow(2, attempt);
+	// Add jitter (±25%) to prevent thundering herd
+	const jitter = exponentialDelay * 0.25 * (Math.random() * 2 - 1);
+	const delay = Math.min(exponentialDelay + jitter, maxDelay);
+	return Math.round(delay);
+}
+
+/**
+ * Sleep for a specified duration
+ */
+function sleep(ms: number): Promise<void> {
+	return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export interface GitHubClientConfig {
 	token: string;
 	owner: string;
@@ -46,9 +113,9 @@ export class GitHubClient {
 	}
 
 	/**
-	 * Make an authenticated request to the GitHub API
+	 * Make an authenticated request to the GitHub API (single attempt)
 	 */
-	private async request<T>(
+	private async requestOnce<T>(
 		endpoint: string,
 		options: {
 			method?: string;
@@ -99,6 +166,49 @@ export class GitHubClient {
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			throw new Error(`GitHub API request failed: ${message}`);
 		}
+	}
+
+	/**
+	 * Make an authenticated request to the GitHub API with automatic retry
+	 * Retries on network errors, rate limits (429), and server errors (5xx)
+	 */
+	private async request<T>(
+		endpoint: string,
+		options: {
+			method?: string;
+			body?: unknown;
+		} = {}
+	): Promise<T> {
+		let lastError: Error | undefined;
+
+		for (let attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
+			try {
+				return await this.requestOnce<T>(endpoint, options);
+			} catch (e) {
+				lastError = e instanceof Error ? e : new Error(String(e));
+
+				// Only retry on retryable errors
+				if (!isRetryableError(lastError)) {
+					throw lastError;
+				}
+
+				// Don't wait after the last attempt
+				if (attempt < DEFAULT_MAX_RETRIES) {
+					const delay = calculateBackoffDelay(
+						attempt,
+						DEFAULT_BASE_DELAY_MS,
+						DEFAULT_MAX_DELAY_MS
+					);
+					console.debug(
+						`[GitHubWebPublish] Retrying request (attempt ${attempt + 1}/${DEFAULT_MAX_RETRIES}) after ${delay}ms: ${endpoint}`
+					);
+					await sleep(delay);
+				}
+			}
+		}
+
+		// All retries exhausted
+		throw lastError ?? new Error('Request failed after retries');
 	}
 
 	/**
