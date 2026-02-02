@@ -12,6 +12,7 @@ export type LogStatus =
 	| 'published'
 	| 'queued'
 	| 'unpublished'
+	| 'withdrawn'
 	| 'failed'
 	| 'validation'
 	| 'warning'
@@ -22,6 +23,7 @@ const STATUS_ICONS: Record<LogStatus, string> = {
 	published: '✅',
 	queued: '⏳',
 	unpublished: '🗑️',
+	withdrawn: '↩️',
 	failed: '❌',
 	validation: '📋',
 	warning: '⚠️',
@@ -33,6 +35,7 @@ const STATUS_LABELS: Record<LogStatus, string> = {
 	published: 'Published',
 	queued: 'Queued for scheduled publish',
 	unpublished: 'Unpublished',
+	withdrawn: 'Withdrawn',
 	failed: 'Failed',
 	validation: 'Validation failed',
 	warning: 'Warning',

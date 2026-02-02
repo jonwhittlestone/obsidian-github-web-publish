@@ -32,6 +32,7 @@ export type PublishAction =
 	| { type: 'schedule-publish'; file: TFile; site: SiteConfig }
 	| { type: 'immediate-publish'; file: TFile; site: SiteConfig }
 	| { type: 'unpublish'; file: TFile; site: SiteConfig }
+	| { type: 'withdraw'; file: TFile; site: SiteConfig }
 	| { type: 'update'; file: TFile; site: SiteConfig; immediate: boolean }
 	| { type: 'none' };
 
@@ -162,6 +163,11 @@ export class FileWatcher {
 			if (newFolder === 'UNPUBLISHED') {
 				return { type: 'unpublish', file, site };
 			}
+		}
+
+		// Move from ready-to-publish-scheduled to unpublished → withdraw (cancel pending PR)
+		if (oldFolder === 'READY_TO_PUBLISH_SCHEDULED' && newFolder === 'UNPUBLISHED') {
+			return { type: 'withdraw', file, site };
 		}
 
 		// Move to ready-to-publish-scheduled → schedule publish

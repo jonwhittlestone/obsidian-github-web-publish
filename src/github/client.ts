@@ -243,6 +243,43 @@ export class GitHubClient {
 	}
 
 	/**
+	 * Close a pull request without merging
+	 */
+	async closePullRequest(prNumber: number): Promise<void> {
+		await this.request(
+			`/repos/${this.owner}/${this.repo}/pulls/${prNumber}`,
+			{
+				method: 'PATCH',
+				body: { state: 'closed' },
+			}
+		);
+	}
+
+	/**
+	 * Find an open PR by branch name
+	 */
+	async findOpenPR(branchName: string): Promise<{ number: number; html_url: string } | null> {
+		interface PRItem {
+			number: number;
+			html_url: string;
+			head: { ref: string };
+			state: string;
+		}
+
+		try {
+			const prs = await this.request<PRItem[]>(
+				`/repos/${this.owner}/${this.repo}/pulls?head=${this.owner}:${branchName}&state=open`
+			);
+			if (prs.length > 0 && prs[0]) {
+				return { number: prs[0].number, html_url: prs[0].html_url };
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
 	 * Delete a branch
 	 */
 	async deleteBranch(branchName: string): Promise<void> {

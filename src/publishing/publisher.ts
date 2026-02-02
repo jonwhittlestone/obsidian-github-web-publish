@@ -40,6 +40,12 @@ export interface UpdateResult {
 	validationResult?: ValidationResult;
 }
 
+export interface WithdrawResult {
+	success: boolean;
+	prNumber?: number;
+	error?: string;
+}
+
 /**
  * Generate a URL-safe slug from a filename
  */
@@ -381,6 +387,69 @@ export class Publisher {
 				prNumber: pr.number,
 				prUrl: pr.html_url,
 				liveUrl,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			return { success: false, error: message };
+		}
+	}
+
+	/**
+	 * Withdraw a pending publish by closing the PR
+	 *
+	 * Used when a file is moved from ready-to-publish-scheduled back to unpublished.
+	 * This cancels the pending PR without affecting the live site.
+	 *
+	 * @param file The file being withdrawn
+	 * @param site The site configuration
+	 */
+	async withdraw(file: TFile, site: SiteConfig): Promise<WithdrawResult> {
+		// Validate we have auth
+		if (!this.settings.githubAuth?.token) {
+			return { success: false, error: 'Not authenticated with GitHub' };
+		}
+
+		// Parse owner/repo from site config
+		const [owner, repo] = site.githubRepo.split('/');
+		if (!owner || !repo) {
+			return { success: false, error: 'Invalid repository format. Expected owner/repo' };
+		}
+
+		// Create GitHub client
+		const client = new GitHubClient({
+			token: this.settings.githubAuth.token,
+			owner,
+			repo,
+		});
+
+		try {
+			// Generate slug to find the branch
+			const slug = slugify(file.basename);
+			const branchName = `publish/${slug}`;
+
+			// Find the open PR for this branch
+			const pr = await client.findOpenPR(branchName);
+
+			if (!pr) {
+				return {
+					success: false,
+					error: `No open PR found for "${file.basename}". The post may have already been published or withdrawn.`,
+				};
+			}
+
+			// Close the PR without merging
+			await client.closePullRequest(pr.number);
+
+			// Clean up the branch
+			try {
+				await client.deleteBranch(branchName);
+			} catch {
+				// Branch deletion can fail if already deleted
+			}
+
+			return {
+				success: true,
+				prNumber: pr.number,
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error';

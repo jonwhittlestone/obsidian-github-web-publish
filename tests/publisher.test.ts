@@ -433,6 +433,110 @@ describe('update', () => {
 	});
 });
 
+describe('withdraw', () => {
+	it('should close open PR and delete branch', async () => {
+		vi.clearAllMocks();
+
+		const testVault = {
+			read: vi.fn(),
+			getAbstractFileByPath: vi.fn().mockReturnValue(null),
+			getFiles: vi.fn().mockReturnValue([]),
+		} as unknown as Vault;
+
+		const testSettings: PluginSettings = {
+			githubAuth: { token: 'test-token', tokenType: 'pat', username: 'testuser' },
+			sites: [],
+			moveAfterPublish: true,
+			addDatePrefix: true,
+			openPrInBrowser: false,
+			deleteAssetsOnUnpublish: false,
+			confirmUnpublish: true,
+		};
+
+		const testSite: SiteConfig = {
+			name: 'Test',
+			githubRepo: 'owner/repo',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets',
+			scheduledLabel: 'publish',
+			vaultPath: 'test',
+		};
+
+		const testPublisher = new Publisher(testVault, testSettings);
+
+		const testFile = {
+			path: 'test/my-post.md',
+			name: 'my-post.md',
+			basename: 'my-post',
+			extension: 'md',
+		} as TFile;
+
+		// Mock API responses for withdraw flow
+		mockRequestUrl
+			// Find open PR
+			.mockResolvedValueOnce(mockResponse(200, [
+				{ number: 42, html_url: 'https://github.com/owner/repo/pull/42', head: { ref: 'publish/my-post' }, state: 'open' },
+			]))
+			// Close PR
+			.mockResolvedValueOnce(mockResponse(200, {}))
+			// Delete branch
+			.mockResolvedValueOnce(mockResponse(204, {}));
+
+		const result = await testPublisher.withdraw(testFile, testSite);
+
+		expect(result.success).toBe(true);
+		expect(result.prNumber).toBe(42);
+	});
+
+	it('should return error if no open PR found', async () => {
+		vi.clearAllMocks();
+
+		const testVault = {
+			read: vi.fn(),
+			getAbstractFileByPath: vi.fn().mockReturnValue(null),
+			getFiles: vi.fn().mockReturnValue([]),
+		} as unknown as Vault;
+
+		const testSettings: PluginSettings = {
+			githubAuth: { token: 'test-token', tokenType: 'pat' },
+			sites: [],
+			moveAfterPublish: true,
+			addDatePrefix: true,
+			openPrInBrowser: false,
+			deleteAssetsOnUnpublish: false,
+			confirmUnpublish: true,
+		};
+
+		const testSite: SiteConfig = {
+			name: 'Test',
+			githubRepo: 'owner/repo',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets',
+			scheduledLabel: 'publish',
+			vaultPath: 'test',
+		};
+
+		const testPublisher = new Publisher(testVault, testSettings);
+
+		const testFile = {
+			path: 'test/my-post.md',
+			name: 'my-post.md',
+			basename: 'my-post',
+			extension: 'md',
+		} as TFile;
+
+		// Mock empty PR list
+		mockRequestUrl.mockResolvedValueOnce(mockResponse(200, []));
+
+		const result = await testPublisher.withdraw(testFile, testSite);
+
+		expect(result.success).toBe(false);
+		expect(result.error).toContain('No open PR found');
+	});
+});
+
 describe('slugify via unpublish', () => {
 	it('should generate correct slugs for various filenames', async () => {
 		vi.clearAllMocks();

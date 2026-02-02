@@ -70,6 +70,8 @@ export default class GitHubWebPublishPlugin extends Plugin {
 						action.site,
 						action.immediate
 					);
+				} else if (action.type === 'withdraw') {
+					void this.handleWithdraw(action.file, action.site);
 				}
 			})
 		);
@@ -435,6 +437,38 @@ export default class GitHubWebPublishPlugin extends Plugin {
 					// Ignore errors when moving back
 				}
 			}
+		}
+	}
+
+	/**
+	 * Handle withdrawing a pending publish (close PR without merging)
+	 */
+	private async handleWithdraw(file: TFile, site: SiteConfig): Promise<void> {
+		new Notice(`Withdrawing: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.withdraw(file, site);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+		await log.log({
+			status: result.success ? 'withdrawn' : 'failed',
+			postTitle: file.basename,
+			filename: file.name,
+			prNumber: result.prNumber,
+			details: result.success ? 'PR closed' : undefined,
+			error: result.error,
+		});
+
+		if (result.success) {
+			this.statusBar.setState('success');
+			new Notice(`Withdrawn: ${file.name}\nPR #${result.prNumber} closed`);
+		} else {
+			this.statusBar.setState('error');
+			new Notice(`Failed to withdraw: ${result.error}`);
 		}
 	}
 }
