@@ -172,18 +172,24 @@ export class Publisher {
 
 			// Generate live URL if site base URL is configured
 			let liveUrl: string | undefined;
-			if (site.siteBaseUrl && datePrefix) {
-				// Jekyll permalink format: /:categories/:year/:month/:day/:title.html
-				const [year, month, day] = datePrefix.split('-');
-				const baseUrl = site.siteBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+			if (site.siteBaseUrl) {
+				// Jekyll uses frontmatter date for permalink, fallback to file date prefix
+				const frontmatterDate = this.extractDateFromContent(rawContent);
+				const urlDate = frontmatterDate || datePrefix;
 
-				// Extract category from frontmatter for URL
-				const category = this.extractCategoryFromContent(rawContent);
-				if (category) {
-					liveUrl = `${baseUrl}/${category}/${year}/${month}/${day}/${slug}.html`;
-				} else {
-					// Fallback without category
-					liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}.html`;
+				if (urlDate) {
+					// Jekyll permalink format: /:categories/:year/:month/:day/:title.html
+					const [year, month, day] = urlDate.split('-');
+					const baseUrl = site.siteBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+
+					// Extract category from frontmatter for URL
+					const category = this.extractCategoryFromContent(rawContent);
+					if (category) {
+						liveUrl = `${baseUrl}/${category}/${year}/${month}/${day}/${slug}.html`;
+					} else {
+						// Fallback without category
+						liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}.html`;
+					}
 				}
 			}
 
@@ -243,6 +249,26 @@ export class Publisher {
 			chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
 		}
 		return btoa(chunks.join(''));
+	}
+
+	/**
+	 * Extract the date from frontmatter for URL generation
+	 * Returns date in YYYY-MM-DD format or null if not found
+	 */
+	private extractDateFromContent(content: string): string | null {
+		// Match frontmatter
+		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+		if (!frontmatterMatch || !frontmatterMatch[1]) return null;
+
+		const frontmatter = frontmatterMatch[1];
+
+		// Match date: YYYY-MM-DD format
+		const dateMatch = frontmatter.match(/date:\s*(\d{4}-\d{2}-\d{2})/);
+		if (dateMatch && dateMatch[1]) {
+			return dateMatch[1];
+		}
+
+		return null;
 	}
 
 	/**

@@ -186,17 +186,86 @@ describe('Publisher', () => {
 			expect(result.error).toContain('Network error');
 		});
 	});
+
+	describe('publish', () => {
+		it('should use frontmatter date for live URL instead of file date prefix', async () => {
+			// Override vault.read to return content with frontmatter date
+			(mockVault.read as ReturnType<typeof vi.fn>).mockResolvedValue('---\ntitle: Test Post\ncategories:\n  - tech\ndate: 2025-06-15\n---\n\nContent');
+
+			mockSite.siteBaseUrl = 'https://example.com/blog';
+
+			// Mock API responses for publish flow
+			mockRequestUrl
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } })) // Get branch ref
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } })) // Create branch
+				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } })) // Create file
+				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' })) // Create PR
+				.mockResolvedValueOnce(mockResponse(200, { merged: true })) // Merge PR
+				.mockResolvedValueOnce(mockResponse(204, {})); // Delete branch
+
+			const result = await publisher.publish(mockFile, mockSite, true);
+
+			expect(result.success).toBe(true);
+			// The URL should use the frontmatter date (2025-06-15), not today's date
+			expect(result.liveUrl).toBe('https://example.com/blog/tech/2025/06/15/test-post.html');
+		});
+
+		it('should fallback to file date prefix when no frontmatter date', async () => {
+			// Override vault.read to return content without date field
+			(mockVault.read as ReturnType<typeof vi.fn>).mockResolvedValue('---\ntitle: Test Post\ncategories:\n  - tech\n---\n\nContent');
+
+			mockSite.siteBaseUrl = 'https://example.com/blog';
+
+			// Mock API responses
+			mockRequestUrl
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
+				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+				.mockResolvedValueOnce(mockResponse(204, {}));
+
+			const result = await publisher.publish(mockFile, mockSite, true);
+
+			expect(result.success).toBe(true);
+			// Without frontmatter date, should use today's date (verify format matches pattern)
+			expect(result.liveUrl).toMatch(/https:\/\/example\.com\/blog\/tech\/\d{4}\/\d{2}\/\d{2}\/test-post\.html/);
+		});
+
+		it('should generate URL without category when not present in frontmatter', async () => {
+			// Override vault.read to return content without categories
+			(mockVault.read as ReturnType<typeof vi.fn>).mockResolvedValue('---\ntitle: Test Post\ndate: 2025-06-15\n---\n\nContent');
+
+			mockSite.siteBaseUrl = 'https://example.com/blog';
+
+			mockRequestUrl
+				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
+				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
+				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+				.mockResolvedValueOnce(mockResponse(204, {}));
+
+			const result = await publisher.publish(mockFile, mockSite, true);
+
+			expect(result.success).toBe(true);
+			// URL should not include category
+			expect(result.liveUrl).toBe('https://example.com/blog/2025/06/15/test-post.html');
+		});
+	});
 });
 
-describe('slugify', () => {
+describe('slugify via unpublish', () => {
 	it('should generate correct slugs for various filenames', async () => {
-		const mockVault = {
+		vi.clearAllMocks();
+
+		const testVault = {
 			read: vi.fn(),
 			getAbstractFileByPath: vi.fn(),
 			getFiles: vi.fn().mockReturnValue([]),
 		} as unknown as Vault;
 
-		const mockSettings: PluginSettings = {
+		const testSettings: PluginSettings = {
 			githubAuth: { token: 'test', tokenType: 'pat' },
 			sites: [],
 			moveAfterPublish: true,
@@ -206,7 +275,7 @@ describe('slugify', () => {
 			confirmUnpublish: true,
 		};
 
-		const mockSite: SiteConfig = {
+		const testSite: SiteConfig = {
 			name: 'Test',
 			githubRepo: 'owner/repo',
 			baseBranch: 'main',
@@ -216,7 +285,7 @@ describe('slugify', () => {
 			vaultPath: 'test',
 		};
 
-		const publisher = new Publisher(mockVault, mockSettings);
+		const testPublisher = new Publisher(testVault, testSettings);
 
 		const testFile = {
 			path: 'test/My Post Title!.md',
@@ -225,9 +294,10 @@ describe('slugify', () => {
 			extension: 'md',
 		} as TFile;
 
+		// Mock empty file list for unpublish to trigger "not found" error with slug in message
 		mockRequestUrl.mockResolvedValueOnce(mockResponse(200, []));
 
-		const result = await publisher.unpublish(testFile, mockSite, false);
+		const result = await testPublisher.unpublish(testFile, testSite, false);
 
 		expect(result.error).toContain('my-post-title');
 	});
