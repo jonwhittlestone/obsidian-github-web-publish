@@ -69,6 +69,19 @@ function getTodayDate(): string {
 }
 
 /**
+ * Extract the base path from a site URL (e.g., 'https://example.com/notes' → '/notes')
+ */
+function getSiteBasePath(siteBaseUrl?: string): string {
+	if (!siteBaseUrl) return '';
+	try {
+		const url = new URL(siteBaseUrl);
+		return url.pathname.replace(/\/$/, '') || '';
+	} catch {
+		return '';
+	}
+}
+
+/**
  * Publisher handles the GitHub publish workflow
  */
 export class Publisher {
@@ -131,6 +144,7 @@ export class Publisher {
 				assetsBasePath: `/${site.assetsPath}/`,
 				wikiLinkStyle: 'text', // Convert wiki-links to plain text (internal notes likely don't exist on Jekyll)
 				assetPrefix: slug, // Prefix assets with post slug to ensure uniqueness
+				siteBasePath: getSiteBasePath(site.siteBaseUrl), // For Jekyll sites with baseurl
 			});
 			const { content, assets } = processor.process(rawContent);
 			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
@@ -138,15 +152,22 @@ export class Publisher {
 			const branchName = `publish/${slug}`;
 
 			// Create branch
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
+
+			// Check if a post with this slug already exists (handles republishing)
+			const postsFiles = await client.listFiles(site.postsPath, branchName);
+			const existingPost = postsFiles.find(f => f.name.endsWith(`-${slug}.md`) || f.name === `${slug}.md`);
 
 			// Upload file to _posts (or configured posts path)
-			const targetPath = `${site.postsPath}/${targetFilename}`;
+			const targetPath = existingPost?.path || `${site.postsPath}/${targetFilename}`;
+			const existingFileSha = existingPost ? (await client.getFile(existingPost.path, branchName))?.sha : undefined;
 			await client.createOrUpdateFile(
 				targetPath,
 				content,
-				`Add post: ${file.basename}`,
-				branchName
+				existingPost ? `Update post: ${file.basename}` : `Add post: ${file.basename}`,
+				branchName,
+				false,
+				existingFileSha
 			);
 
 			// Upload assets (images) referenced in the content
@@ -155,12 +176,15 @@ export class Publisher {
 				if (assetFile) {
 					const assetContent = await this.vault.readBinary(assetFile);
 					const base64Content = this.arrayBufferToBase64(assetContent);
+					// Check if asset already exists
+					const existingAsset = await client.getFile(asset.targetPath, branchName);
 					await client.createOrUpdateFile(
 						asset.targetPath,
 						base64Content,
-						`Add image: ${asset.filename}`,
+						existingAsset ? `Update image: ${asset.filename}` : `Add image: ${asset.filename}`,
 						branchName,
-						true // isBase64
+						true, // isBase64
+						existingAsset?.sha
 					);
 				} else {
 					console.warn(`[GitHubWebPublish] Asset not found: ${asset.filename}`);
@@ -273,6 +297,7 @@ export class Publisher {
 				assetsBasePath: `/${site.assetsPath}/`,
 				wikiLinkStyle: 'text',
 				assetPrefix: slug,
+				siteBasePath: getSiteBasePath(site.siteBaseUrl),
 			});
 			const { content, assets } = processor.process(rawContent);
 			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
@@ -302,7 +327,7 @@ export class Publisher {
 			}
 
 			// Create branch
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
 
 			// Get the existing file's SHA from the new branch
 			const existingFile = await client.getFile(existingPost.path, branchName);
@@ -603,7 +628,7 @@ export class Publisher {
 			}
 
 			// Create branch for unpublish
-			await client.createBranch(branchName, site.baseBranch);
+			await client.ensureFreshBranch(branchName, site.baseBranch);
 
 			const deletedFiles: string[] = [];
 

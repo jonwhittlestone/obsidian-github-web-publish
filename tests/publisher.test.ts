@@ -113,6 +113,8 @@ describe('Publisher', () => {
 				.mockResolvedValueOnce(mockResponse(200, [
 					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'abc123', type: 'file' },
 				]))
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha-123' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/unpublish/test-post', object: { sha: 'branch-sha' } }))
 				.mockResolvedValueOnce(mockResponse(200, { commit: { sha: 'commit-sha' } }))
@@ -133,6 +135,8 @@ describe('Publisher', () => {
 					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'sha2', type: 'file' },
 					{ name: 'other-post.md', path: '_posts/other-post.md', sha: 'sha3', type: 'file' },
 				]))
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/unpublish/test-post', object: { sha: 'sha' } }))
 				.mockResolvedValueOnce(mockResponse(200, {}))
@@ -154,6 +158,8 @@ describe('Publisher', () => {
 				.mockResolvedValueOnce(mockResponse(200, [
 					{ name: '2026-02-01-test-post.md', path: '_posts/2026-02-01-test-post.md', sha: 'post-sha', type: 'file' },
 				]))
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'ref', object: { sha: 'sha' } }))
 				.mockResolvedValueOnce(mockResponse(200, {}))
@@ -196,8 +202,11 @@ describe('Publisher', () => {
 
 			// Mock API responses for publish flow
 			mockRequestUrl
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } })) // Get branch ref
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } })) // Create branch
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } })) // Create file
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' })) // Create PR
 				.mockResolvedValueOnce(mockResponse(200, { merged: true })) // Merge PR
@@ -218,8 +227,11 @@ describe('Publisher', () => {
 
 			// Mock API responses
 			mockRequestUrl
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
 				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
@@ -239,8 +251,11 @@ describe('Publisher', () => {
 			mockSite.siteBaseUrl = 'https://example.com/blog';
 
 			mockRequestUrl
+				// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
 				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
@@ -302,6 +317,8 @@ describe('update', () => {
 			.mockResolvedValueOnce(mockResponse(200, [
 				{ name: '2025-06-15-my-post.md', path: '_posts/2025-06-15-my-post.md', sha: 'existing-sha', type: 'file' },
 			]))
+			// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+			.mockRejectedValueOnce(new Error('Not found'))
 			// Get branch ref for createBranch
 			.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 			// Create branch
@@ -417,6 +434,8 @@ describe('update', () => {
 			.mockResolvedValueOnce(mockResponse(200, [
 				{ name: '2024-03-20-my-post.md', path: '_posts/2024-03-20-my-post.md', sha: 'sha', type: 'file' },
 			]))
+			// ensureFreshBranch: check if branch exists (404 = doesn't exist)
+			.mockRejectedValueOnce(new Error('Not found'))
 			.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 			.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/update/my-post', object: { sha: 'sha' } }))
 			.mockResolvedValueOnce(mockResponse(200, { sha: 'file-sha', content: 'base64' }))

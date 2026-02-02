@@ -9,7 +9,7 @@ import {
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
-import { FileWatcher, Publisher, SITE_FOLDERS } from './publishing';
+import { FileWatcher, FrontmatterValidator, Publisher, SITE_FOLDERS } from './publishing';
 import { getUsername } from './github';
 import { StatusBar } from './ui';
 import { ActivityLog } from './logging';
@@ -279,6 +279,58 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	}
 
 	/**
+	 * Update frontmatter with published_as metadata
+	 */
+	private async updatePublishedMetadata(
+		file: TFile,
+		site: SiteConfig,
+		result: { prNumber?: number; liveUrl?: string }
+	): Promise<void> {
+		try {
+			const content = await this.app.vault.read(file);
+
+			// Parse existing frontmatter
+			const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+			if (!frontmatterMatch || !frontmatterMatch[1]) {
+				console.warn('[GitHubWebPublish] No frontmatter found, skipping published_as update');
+				return;
+			}
+
+			const frontmatter: string = frontmatterMatch[1];
+			const restOfContent = content.slice(frontmatterMatch[0].length);
+
+			// Build published_as metadata
+			const now = new Date();
+			const dateStr = now.toISOString().split('T')[0];
+			const publishedAs = [
+				`published_as:`,
+				`  site: ${site.name}`,
+				`  repo: ${site.githubRepo}`,
+				`  date: ${dateStr}`,
+			];
+
+			if (result.prNumber) {
+				publishedAs.push(`  pr: ${result.prNumber}`);
+			}
+			if (result.liveUrl) {
+				publishedAs.push(`  url: ${result.liveUrl}`);
+			}
+
+			// Check if published_as already exists and remove it
+			const cleanedFrontmatter = frontmatter
+				.replace(/published_as:[\s\S]*?(?=\n[a-z_]+:|$)/i, '')
+				.trim();
+
+			// Rebuild content with updated frontmatter
+			const newContent = `---\n${cleanedFrontmatter}\n${publishedAs.join('\n')}\n---${restOfContent}`;
+
+			await this.app.vault.modify(file, newContent);
+		} catch (e) {
+			console.error('[GitHubWebPublish] Failed to update published_as metadata:', e);
+		}
+	}
+
+	/**
 	 * Handle publishing a file to GitHub
 	 */
 	private async handlePublish(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
@@ -303,6 +355,12 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			logStatus = 'failed';
 		}
 
+		// Format validation errors as details if applicable
+		let details: string | undefined;
+		if (logStatus === 'validation' && result.validationResult) {
+			details = FrontmatterValidator.formatErrors(result.validationResult);
+		}
+
 		await log.log({
 			status: logStatus,
 			postTitle: file.basename,
@@ -311,6 +369,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			prUrl: result.prUrl,
 			liveUrl: result.liveUrl,
 			error: result.error,
+			details,
 		});
 
 		if (result.success) {
@@ -321,6 +380,9 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			} else {
 				new Notice(`Scheduled for publish: ${file.name}\nPR #${result.prNumber}`);
 			}
+
+			// Update frontmatter with published_as metadata
+			await this.updatePublishedMetadata(file, site, result);
 
 			// Move to published/ if setting enabled
 			if (this.settings.moveAfterPublish) {
@@ -407,6 +469,9 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		const log = new ActivityLog(this.app.vault, site.vaultPath);
 
 		if (result.success) {
+			// Update frontmatter with refreshed published_as metadata
+			await this.updatePublishedMetadata(file, site, result);
+
 			if (immediate) {
 				await log.log({
 					status: 'published',

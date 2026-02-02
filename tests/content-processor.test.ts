@@ -89,6 +89,15 @@ describe('ContentProcessor', () => {
 			expect(result.content).toBe('![image](/assets/images/image.jpg)');
 		});
 
+		it('should include siteBasePath in image URL for Jekyll sites with baseurl', () => {
+			const processorWithBasePath = new ContentProcessor({
+				assetsBasePath: '/assets/images/',
+				siteBasePath: '/notes',
+			});
+			const result = processorWithBasePath.process('![[photo.png]]');
+			expect(result.content).toBe('![photo](/notes/assets/images/photo.png)');
+		});
+
 		it('should track assets for upload', () => {
 			const result = processor.process('![[photo.png]] and ![[diagram.svg]]');
 			expect(result.assets).toHaveLength(2);
