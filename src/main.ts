@@ -96,13 +96,39 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		// Register commands
 		this.addCommand({
 			id: 'publish-current-note',
-			name: 'Publish current note',
+			name: 'Publish current note (immediate)',
 			checkCallback: (checking: boolean) => {
-				if (!this.settings.githubAuth?.token) {
-					return false;
-				}
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== 'md') return false;
+				if (!this.settings.githubAuth?.token) return false;
+
+				const site = this.findSiteForFile(file);
+				if (!site) return false;
+
 				if (!checking) {
-					new Notice('Publish functionality coming in next phase');
+					void this.handlePublish(file, site, true);
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: 'republish-current-note',
+			name: 'Republish current note (update existing)',
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== 'md') return false;
+				if (!this.settings.githubAuth?.token) return false;
+
+				const site = this.findSiteForFile(file);
+				if (!site) return false;
+
+				// Only show for files in published/ folder
+				const isPublished = file.path.includes(`/${SITE_FOLDERS.PUBLISHED}/`);
+				if (!isPublished) return false;
+
+				if (!checking) {
+					void this.handleUpdate(file, site, true);
 				}
 				return true;
 			},
@@ -147,6 +173,18 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	 */
 	isAuthenticated(): boolean {
 		return !!this.settings.githubAuth?.token;
+	}
+
+	/**
+	 * Find which site a file belongs to based on its path
+	 */
+	private findSiteForFile(file: TFile): SiteConfig | null {
+		for (const site of this.settings.sites) {
+			if (file.path.startsWith(site.vaultPath + '/') || file.path === site.vaultPath) {
+				return site;
+			}
+		}
+		return null;
 	}
 
 	/**
