@@ -206,6 +206,7 @@ describe('Publisher', () => {
 				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } })) // Get branch ref
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } })) // Create branch
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } })) // Create file
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' })) // Create PR
 				.mockResolvedValueOnce(mockResponse(200, { merged: true })) // Merge PR
@@ -230,6 +231,7 @@ describe('Publisher', () => {
 				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
 				.mockResolvedValueOnce(mockResponse(200, { merged: true }))
@@ -253,6 +255,7 @@ describe('Publisher', () => {
 				.mockRejectedValueOnce(new Error('Not found'))
 				.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/publish/test-post', object: { sha: 'new-sha' } }))
+				.mockResolvedValueOnce(mockResponse(200, [])) // List files (no existing post)
 				.mockResolvedValueOnce(mockResponse(201, { content: { sha: 'file-sha' } }))
 				.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'https://github.com/testowner/testrepo/pull/1', title: 'Publish: test-post' }))
 				.mockResolvedValueOnce(mockResponse(200, { merged: true }))

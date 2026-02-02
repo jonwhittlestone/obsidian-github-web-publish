@@ -154,13 +154,20 @@ export class Publisher {
 			// Create branch
 			await client.ensureFreshBranch(branchName, site.baseBranch);
 
+			// Check if a post with this slug already exists (handles republishing)
+			const postsFiles = await client.listFiles(site.postsPath, branchName);
+			const existingPost = postsFiles.find(f => f.name.endsWith(`-${slug}.md`) || f.name === `${slug}.md`);
+
 			// Upload file to _posts (or configured posts path)
-			const targetPath = `${site.postsPath}/${targetFilename}`;
+			const targetPath = existingPost?.path || `${site.postsPath}/${targetFilename}`;
+			const existingFileSha = existingPost ? (await client.getFile(existingPost.path, branchName))?.sha : undefined;
 			await client.createOrUpdateFile(
 				targetPath,
 				content,
-				`Add post: ${file.basename}`,
-				branchName
+				existingPost ? `Update post: ${file.basename}` : `Add post: ${file.basename}`,
+				branchName,
+				false,
+				existingFileSha
 			);
 
 			// Upload assets (images) referenced in the content
@@ -169,12 +176,15 @@ export class Publisher {
 				if (assetFile) {
 					const assetContent = await this.vault.readBinary(assetFile);
 					const base64Content = this.arrayBufferToBase64(assetContent);
+					// Check if asset already exists
+					const existingAsset = await client.getFile(asset.targetPath, branchName);
 					await client.createOrUpdateFile(
 						asset.targetPath,
 						base64Content,
-						`Add image: ${asset.filename}`,
+						existingAsset ? `Update image: ${asset.filename}` : `Add image: ${asset.filename}`,
 						branchName,
-						true // isBase64
+						true, // isBase64
+						existingAsset?.sha
 					);
 				} else {
 					console.warn(`[GitHubWebPublish] Asset not found: ${asset.filename}`);
