@@ -184,12 +184,13 @@ describe('Publisher', () => {
 		});
 
 		it('should handle API errors gracefully', async () => {
-			mockRequestUrl.mockRejectedValueOnce(new Error('Network error'));
+			// Mock a non-retryable error (validation error, not network error)
+			mockRequestUrl.mockResolvedValueOnce(mockResponse(422, { message: 'Validation Failed' }));
 
 			const result = await publisher.unpublish(mockFile, mockSite, false);
 
 			expect(result.success).toBe(false);
-			expect(result.error).toContain('Network error');
+			expect(result.error).toContain('Validation Failed');
 		});
 	});
 
