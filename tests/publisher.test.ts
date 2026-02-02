@@ -255,6 +255,184 @@ describe('Publisher', () => {
 	});
 });
 
+describe('update', () => {
+	it('should update an existing published post', async () => {
+		vi.clearAllMocks();
+
+		const testVault = {
+			read: vi.fn().mockResolvedValue('---\ntitle: Updated Post\ncategories:\n  - tech\ndate: 2025-06-15\n---\n\nUpdated content'),
+			getAbstractFileByPath: vi.fn().mockReturnValue(null),
+			getFiles: vi.fn().mockReturnValue([]),
+			readBinary: vi.fn(),
+		} as unknown as Vault;
+
+		const testSettings: PluginSettings = {
+			githubAuth: { token: 'test-token', tokenType: 'pat', username: 'testuser' },
+			sites: [],
+			moveAfterPublish: true,
+			addDatePrefix: true,
+			openPrInBrowser: false,
+			deleteAssetsOnUnpublish: false,
+			confirmUnpublish: true,
+		};
+
+		const testSite: SiteConfig = {
+			name: 'Test',
+			githubRepo: 'owner/repo',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets',
+			scheduledLabel: 'publish',
+			vaultPath: 'test',
+			siteBaseUrl: 'https://example.com/blog',
+		};
+
+		const testPublisher = new Publisher(testVault, testSettings);
+
+		const testFile = {
+			path: 'test/my-post.md',
+			name: 'my-post.md',
+			basename: 'my-post',
+			extension: 'md',
+		} as TFile;
+
+		// Mock API responses for update flow
+		mockRequestUrl
+			// List files to find existing post
+			.mockResolvedValueOnce(mockResponse(200, [
+				{ name: '2025-06-15-my-post.md', path: '_posts/2025-06-15-my-post.md', sha: 'existing-sha', type: 'file' },
+			]))
+			// Get branch ref for createBranch
+			.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+			// Create branch
+			.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/update/my-post', object: { sha: 'branch-sha' } }))
+			// Get existing file SHA from new branch
+			.mockResolvedValueOnce(mockResponse(200, { sha: 'existing-file-sha', content: 'base64content' }))
+			// Update file
+			.mockResolvedValueOnce(mockResponse(200, { content: { sha: 'new-sha', path: '_posts/2025-06-15-my-post.md' } }))
+			// Create PR
+			.mockResolvedValueOnce(mockResponse(201, { number: 42, html_url: 'https://github.com/owner/repo/pull/42', title: 'Update: my-post' }))
+			// Merge PR
+			.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+			// Delete branch
+			.mockResolvedValueOnce(mockResponse(204, {}));
+
+		const result = await testPublisher.update(testFile, testSite, true);
+
+		expect(result.success).toBe(true);
+		expect(result.prNumber).toBe(42);
+		expect(result.liveUrl).toBe('https://example.com/blog/tech/2025/06/15/my-post.html');
+	});
+
+	it('should return error if no existing post found', async () => {
+		vi.clearAllMocks();
+
+		const testVault = {
+			read: vi.fn().mockResolvedValue('---\ntitle: Test\n---\n\nContent'),
+			getAbstractFileByPath: vi.fn().mockReturnValue(null),
+			getFiles: vi.fn().mockReturnValue([]),
+		} as unknown as Vault;
+
+		const testSettings: PluginSettings = {
+			githubAuth: { token: 'test-token', tokenType: 'pat' },
+			sites: [],
+			moveAfterPublish: true,
+			addDatePrefix: true,
+			openPrInBrowser: false,
+			deleteAssetsOnUnpublish: false,
+			confirmUnpublish: true,
+		};
+
+		const testSite: SiteConfig = {
+			name: 'Test',
+			githubRepo: 'owner/repo',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets',
+			scheduledLabel: 'publish',
+			vaultPath: 'test',
+		};
+
+		const testPublisher = new Publisher(testVault, testSettings);
+
+		const testFile = {
+			path: 'test/new-post.md',
+			name: 'new-post.md',
+			basename: 'new-post',
+			extension: 'md',
+		} as TFile;
+
+		// Mock empty file list
+		mockRequestUrl.mockResolvedValueOnce(mockResponse(200, []));
+
+		const result = await testPublisher.update(testFile, testSite, true);
+
+		expect(result.success).toBe(false);
+		expect(result.error).toContain('No existing post found');
+		expect(result.error).toContain('Use publish instead');
+	});
+
+	it('should use existing file date for URL when no frontmatter date', async () => {
+		vi.clearAllMocks();
+
+		const testVault = {
+			read: vi.fn().mockResolvedValue('---\ntitle: Updated Post\ncategories:\n  - tech\n---\n\nUpdated content'),
+			getAbstractFileByPath: vi.fn().mockReturnValue(null),
+			getFiles: vi.fn().mockReturnValue([]),
+			readBinary: vi.fn(),
+		} as unknown as Vault;
+
+		const testSettings: PluginSettings = {
+			githubAuth: { token: 'test-token', tokenType: 'pat', username: 'testuser' },
+			sites: [],
+			moveAfterPublish: true,
+			addDatePrefix: true,
+			openPrInBrowser: false,
+			deleteAssetsOnUnpublish: false,
+			confirmUnpublish: true,
+		};
+
+		const testSite: SiteConfig = {
+			name: 'Test',
+			githubRepo: 'owner/repo',
+			baseBranch: 'main',
+			postsPath: '_posts',
+			assetsPath: 'assets',
+			scheduledLabel: 'publish',
+			vaultPath: 'test',
+			siteBaseUrl: 'https://example.com/blog',
+		};
+
+		const testPublisher = new Publisher(testVault, testSettings);
+
+		const testFile = {
+			path: 'test/my-post.md',
+			name: 'my-post.md',
+			basename: 'my-post',
+			extension: 'md',
+		} as TFile;
+
+		// Mock API responses - existing post has date 2024-03-20
+		mockRequestUrl
+			.mockResolvedValueOnce(mockResponse(200, [
+				{ name: '2024-03-20-my-post.md', path: '_posts/2024-03-20-my-post.md', sha: 'sha', type: 'file' },
+			]))
+			.mockResolvedValueOnce(mockResponse(200, { object: { sha: 'main-sha' } }))
+			.mockResolvedValueOnce(mockResponse(201, { ref: 'refs/heads/update/my-post', object: { sha: 'sha' } }))
+			.mockResolvedValueOnce(mockResponse(200, { sha: 'file-sha', content: 'base64' }))
+			.mockResolvedValueOnce(mockResponse(200, { content: { sha: 'new-sha', path: '_posts/2024-03-20-my-post.md' } }))
+			.mockResolvedValueOnce(mockResponse(201, { number: 1, html_url: 'url', title: 'Update' }))
+			.mockResolvedValueOnce(mockResponse(200, { merged: true }))
+			.mockResolvedValueOnce(mockResponse(204, {}));
+
+		const result = await testPublisher.update(testFile, testSite, true);
+
+		expect(result.success).toBe(true);
+		// Should use the existing file's date (2024-03-20) in the URL
+		expect(result.liveUrl).toBe('https://example.com/blog/tech/2024/03/20/my-post.html');
+	});
+});
+
 describe('slugify via unpublish', () => {
 	it('should generate correct slugs for various filenames', async () => {
 		vi.clearAllMocks();

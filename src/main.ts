@@ -9,7 +9,7 @@ import {
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
-import { FileWatcher, Publisher } from './publishing';
+import { FileWatcher, Publisher, SITE_FOLDERS } from './publishing';
 import { getUsername } from './github';
 import { StatusBar } from './ui';
 import { ActivityLog } from './logging';
@@ -65,7 +65,11 @@ export default class GitHubWebPublishPlugin extends Plugin {
 				} else if (action.type === 'unpublish') {
 					void this.handleUnpublish(action.file, action.site);
 				} else if (action.type === 'update') {
-					new Notice(`Updating: ${file.name} (not yet implemented)`);
+					void this.handleUpdate(
+						action.file,
+						action.site,
+						action.immediate
+					);
 				}
 			})
 		);
@@ -344,6 +348,93 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		} else {
 			this.statusBar.setState('error');
 			new Notice(`Failed to unpublish: ${result.error}`);
+		}
+	}
+
+	/**
+	 * Handle updating an already-published file
+	 */
+	private async handleUpdate(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
+		new Notice(`Updating: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.update(file, site, immediate);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+
+		if (result.success) {
+			if (immediate) {
+				await log.log({
+					status: 'published',
+					postTitle: file.basename,
+					filename: file.name,
+					liveUrl: result.liveUrl,
+					prNumber: result.prNumber,
+					prUrl: result.prUrl,
+					details: 'Updated',
+				});
+
+				// Move to published/ folder
+				await this.moveToPublished(file, site);
+
+				this.statusBar.setState('success');
+				new Notice(`Updated: ${file.name}`);
+
+				// Open PR if configured
+				if (this.settings.openPrInBrowser && result.prUrl) {
+					window.open(result.prUrl);
+				}
+			} else {
+				await log.log({
+					status: 'queued',
+					postTitle: file.basename,
+					filename: file.name,
+					prNumber: result.prNumber,
+					prUrl: result.prUrl,
+					details: 'Update queued',
+				});
+
+				this.statusBar.setState('success');
+				new Notice(`Update queued: ${file.name}\nPR #${result.prNumber} awaiting merge`);
+
+				// Open PR if configured
+				if (this.settings.openPrInBrowser && result.prUrl) {
+					window.open(result.prUrl);
+				}
+			}
+		} else {
+			// Log failure
+			await log.log({
+				status: 'failed',
+				postTitle: file.basename,
+				filename: file.name,
+				error: result.error,
+			});
+
+			this.statusBar.setState('error');
+			new Notice(`Failed to update: ${result.error}`);
+
+			// Move back to published/ folder on failure
+			if (this.settings.moveAfterPublish) {
+				const publishedPath = `${site.vaultPath}/${SITE_FOLDERS.PUBLISHED}/${file.name}`;
+				try {
+					await this.app.vault.rename(file, publishedPath);
+
+					// Log warning
+					await log.log({
+						status: 'warning',
+						postTitle: file.basename,
+						filename: file.name,
+						details: 'Moved back to published/ due to update failure',
+					});
+				} catch {
+					// Ignore errors when moving back
+				}
+			}
 		}
 	}
 }

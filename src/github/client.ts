@@ -127,13 +127,15 @@ export class GitHubClient {
 	 * @param message Commit message
 	 * @param branch Target branch
 	 * @param isBase64 If true, content is already base64-encoded (for binary files)
+	 * @param existingSha SHA of the existing file (required for updates)
 	 */
 	async createOrUpdateFile(
 		path: string,
 		content: string,
 		message: string,
 		branch: string,
-		isBase64 = false
+		isBase64 = false,
+		existingSha?: string
 	): Promise<CreateFileResult> {
 		let encodedContent: string;
 
@@ -151,15 +153,22 @@ export class GitHubClient {
 			content: { sha: string; path: string };
 		}
 
+		const body: { message: string; content: string; branch: string; sha?: string } = {
+			message,
+			content: encodedContent,
+			branch,
+		};
+
+		// Include SHA for updates to existing files
+		if (existingSha) {
+			body.sha = existingSha;
+		}
+
 		const response = await this.request<FileResponse>(
 			`/repos/${this.owner}/${this.repo}/contents/${path}`,
 			{
 				method: 'PUT',
-				body: {
-					message,
-					content: encodedContent,
-					branch,
-				},
+				body,
 			}
 		);
 
