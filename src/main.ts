@@ -9,7 +9,7 @@ import {
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
-import { FileWatcher, Publisher, SITE_FOLDERS } from './publishing';
+import { FileWatcher, FrontmatterValidator, Publisher, SITE_FOLDERS } from './publishing';
 import { getUsername } from './github';
 import { StatusBar } from './ui';
 import { ActivityLog } from './logging';
@@ -355,6 +355,12 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			logStatus = 'failed';
 		}
 
+		// Format validation errors as details if applicable
+		let details: string | undefined;
+		if (logStatus === 'validation' && result.validationResult) {
+			details = FrontmatterValidator.formatErrors(result.validationResult);
+		}
+
 		await log.log({
 			status: logStatus,
 			postTitle: file.basename,
@@ -363,6 +369,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			prUrl: result.prUrl,
 			liveUrl: result.liveUrl,
 			error: result.error,
+			details,
 		});
 
 		if (result.success) {
