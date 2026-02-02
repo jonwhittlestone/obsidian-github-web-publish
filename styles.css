@@ -1,8 +1,161 @@
 /*
+ * GitHub Web Publish - Plugin Styles
+ */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* ================================
+   Site Cards in Settings
+   ================================ */
 
-If your plugin does not need CSS, delete this file.
+.github-publish-site-card {
+	background-color: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 12px 16px;
+	margin-bottom: 12px;
+}
 
-*/
+.github-publish-site-info {
+	margin-bottom: 8px;
+}
+
+.github-publish-site-name {
+	font-weight: 600;
+	font-size: 1.1em;
+	margin-bottom: 4px;
+}
+
+.github-publish-site-detail {
+	font-size: 0.9em;
+	color: var(--text-muted);
+	margin-left: 20px;
+}
+
+.github-publish-site-buttons {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.github-publish-site-buttons button {
+	font-size: 0.85em;
+}
+
+.github-publish-empty-sites {
+	padding: 20px;
+	text-align: center;
+	background-color: var(--background-secondary);
+	border-radius: 8px;
+	margin-bottom: 12px;
+}
+
+.github-publish-info {
+	margin-top: 8px;
+}
+
+/* ================================
+   Site Configuration Modal
+   ================================ */
+
+.github-publish-site-modal {
+	max-width: 500px;
+}
+
+.github-publish-section {
+	margin-top: 16px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.github-publish-section h4 {
+	margin: 0 0 4px 0;
+	font-size: 0.95em;
+}
+
+.github-publish-modal-buttons {
+	display: flex;
+	gap: 8px;
+	margin-top: 24px;
+	padding-top: 16px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.github-publish-modal-spacer {
+	flex: 1;
+}
+
+/* ================================
+   Auth Modal
+   ================================ */
+
+.github-publish-auth-modal {
+	max-width: 400px;
+}
+
+.github-publish-code-container {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.github-publish-user-code {
+	font-size: 1.8em;
+	font-weight: bold;
+	letter-spacing: 0.1em;
+	padding: 8px 16px;
+	background-color: var(--background-secondary);
+	border-radius: 6px;
+}
+
+.github-publish-copy-button {
+	font-size: 0.85em;
+}
+
+.github-publish-link-container {
+	margin: 12px 0;
+}
+
+.github-publish-verification-link {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.github-publish-status {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.github-publish-expiry {
+	font-size: 0.85em;
+	color: var(--text-muted);
+}
+
+.github-publish-success {
+	color: var(--text-success);
+}
+
+.github-publish-error {
+	color: var(--text-error);
+}
+
+/* ================================
+   Advanced Settings Sections
+   ================================ */
+
+.github-publish-advanced,
+.github-publish-pat-section {
+	margin: 12px 0;
+	padding: 8px 0;
+}
+
+.github-publish-advanced summary,
+.github-publish-pat-section summary {
+	cursor: pointer;
+	font-weight: 500;
+	color: var(--text-muted);
+}
+
+.github-publish-advanced summary:hover,
+.github-publish-pat-section summary:hover {
+	color: var(--text-normal);
+}

@@ -9,7 +9,7 @@ import {
 	DEFAULT_SETTINGS,
 	PluginSettings,
 } from './settings';
-import { FileWatcher, Publisher } from './publishing';
+import { FileWatcher, Publisher, SITE_FOLDERS } from './publishing';
 import { getUsername } from './github';
 import { StatusBar } from './ui';
 import { ActivityLog } from './logging';
@@ -63,9 +63,15 @@ export default class GitHubWebPublishPlugin extends Plugin {
 						action.type === 'immediate-publish'
 					);
 				} else if (action.type === 'unpublish') {
-					new Notice(`Unpublishing: ${file.name} (not yet implemented)`);
+					void this.handleUnpublish(action.file, action.site);
 				} else if (action.type === 'update') {
-					new Notice(`Updating: ${file.name} (not yet implemented)`);
+					void this.handleUpdate(
+						action.file,
+						action.site,
+						action.immediate
+					);
+				} else if (action.type === 'withdraw') {
+					void this.handleWithdraw(action.file, action.site);
 				}
 			})
 		);
@@ -90,13 +96,39 @@ export default class GitHubWebPublishPlugin extends Plugin {
 		// Register commands
 		this.addCommand({
 			id: 'publish-current-note',
-			name: 'Publish current note',
+			name: 'Publish current note (immediate)',
 			checkCallback: (checking: boolean) => {
-				if (!this.settings.githubAuth?.token) {
-					return false;
-				}
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== 'md') return false;
+				if (!this.settings.githubAuth?.token) return false;
+
+				const site = this.findSiteForFile(file);
+				if (!site) return false;
+
 				if (!checking) {
-					new Notice('Publish functionality coming in next phase');
+					void this.handlePublish(file, site, true);
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: 'republish-current-note',
+			name: 'Republish current note (update existing)',
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== 'md') return false;
+				if (!this.settings.githubAuth?.token) return false;
+
+				const site = this.findSiteForFile(file);
+				if (!site) return false;
+
+				// Only show for files in published/ folder
+				const isPublished = file.path.includes(`/${SITE_FOLDERS.PUBLISHED}/`);
+				if (!isPublished) return false;
+
+				if (!checking) {
+					void this.handleUpdate(file, site, true);
 				}
 				return true;
 			},
@@ -141,6 +173,18 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	 */
 	isAuthenticated(): boolean {
 		return !!this.settings.githubAuth?.token;
+	}
+
+	/**
+	 * Find which site a file belongs to based on its path
+	 */
+	private findSiteForFile(file: TFile): SiteConfig | null {
+		for (const site of this.settings.sites) {
+			if (file.path.startsWith(site.vaultPath + '/') || file.path === site.vaultPath) {
+				return site;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -223,6 +267,18 @@ export default class GitHubWebPublishPlugin extends Plugin {
 	}
 
 	/**
+	 * Move a file to the published folder after successful publish
+	 */
+	private async moveToPublished(file: TFile, site: SiteConfig): Promise<void> {
+		const publishedPath = `${site.vaultPath}/published/${file.name}`;
+		try {
+			await this.app.fileManager.renameFile(file, publishedPath);
+		} catch (e) {
+			console.error('[GitHubWebPublish] Failed to move file to published:', e);
+		}
+	}
+
+	/**
 	 * Handle publishing a file to GitHub
 	 */
 	private async handlePublish(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
@@ -253,6 +309,7 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			filename: file.name,
 			prNumber: result.prNumber,
 			prUrl: result.prUrl,
+			liveUrl: result.liveUrl,
 			error: result.error,
 		});
 
@@ -263,6 +320,11 @@ export default class GitHubWebPublishPlugin extends Plugin {
 				new Notice(`Published: ${file.name}`);
 			} else {
 				new Notice(`Scheduled for publish: ${file.name}\nPR #${result.prNumber}`);
+			}
+
+			// Move to published/ if setting enabled
+			if (this.settings.moveAfterPublish) {
+				await this.moveToPublished(file, site);
 			}
 
 			// Open PR in browser if setting enabled
@@ -289,6 +351,162 @@ export default class GitHubWebPublishPlugin extends Plugin {
 			} else {
 				new Notice(`Failed to publish: ${result.error}`);
 			}
+		}
+	}
+
+	/**
+	 * Handle unpublishing a file from GitHub
+	 */
+	private async handleUnpublish(file: TFile, site: SiteConfig): Promise<void> {
+		new Notice(`Unpublishing: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.unpublish(
+			file,
+			site,
+			this.settings.deleteAssetsOnUnpublish
+		);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+		await log.log({
+			status: result.success ? 'unpublished' : 'failed',
+			postTitle: file.basename,
+			filename: file.name,
+			details: result.success
+				? `Deleted: ${result.deletedFiles.join(', ')}`
+				: undefined,
+			error: result.error,
+		});
+
+		if (result.success) {
+			this.statusBar.setState('success');
+			new Notice(`Unpublished: ${file.name}\nDeleted ${result.deletedFiles.length} file(s)`);
+		} else {
+			this.statusBar.setState('error');
+			new Notice(`Failed to unpublish: ${result.error}`);
+		}
+	}
+
+	/**
+	 * Handle updating an already-published file
+	 */
+	private async handleUpdate(file: TFile, site: SiteConfig, immediate: boolean): Promise<void> {
+		new Notice(`Updating: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.update(file, site, immediate);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+
+		if (result.success) {
+			if (immediate) {
+				await log.log({
+					status: 'published',
+					postTitle: file.basename,
+					filename: file.name,
+					liveUrl: result.liveUrl,
+					prNumber: result.prNumber,
+					prUrl: result.prUrl,
+					details: 'Updated',
+				});
+
+				// Move to published/ folder
+				await this.moveToPublished(file, site);
+
+				this.statusBar.setState('success');
+				new Notice(`Updated: ${file.name}`);
+
+				// Open PR if configured
+				if (this.settings.openPrInBrowser && result.prUrl) {
+					window.open(result.prUrl);
+				}
+			} else {
+				await log.log({
+					status: 'queued',
+					postTitle: file.basename,
+					filename: file.name,
+					prNumber: result.prNumber,
+					prUrl: result.prUrl,
+					details: 'Update queued',
+				});
+
+				this.statusBar.setState('success');
+				new Notice(`Update queued: ${file.name}\nPR #${result.prNumber} awaiting merge`);
+
+				// Open PR if configured
+				if (this.settings.openPrInBrowser && result.prUrl) {
+					window.open(result.prUrl);
+				}
+			}
+		} else {
+			// Log failure
+			await log.log({
+				status: 'failed',
+				postTitle: file.basename,
+				filename: file.name,
+				error: result.error,
+			});
+
+			this.statusBar.setState('error');
+			new Notice(`Failed to update: ${result.error}`);
+
+			// Move back to published/ folder on failure
+			if (this.settings.moveAfterPublish) {
+				const publishedPath = `${site.vaultPath}/${SITE_FOLDERS.PUBLISHED}/${file.name}`;
+				try {
+					await this.app.vault.rename(file, publishedPath);
+
+					// Log warning
+					await log.log({
+						status: 'warning',
+						postTitle: file.basename,
+						filename: file.name,
+						details: 'Moved back to published/ due to update failure',
+					});
+				} catch {
+					// Ignore errors when moving back
+				}
+			}
+		}
+	}
+
+	/**
+	 * Handle withdrawing a pending publish (close PR without merging)
+	 */
+	private async handleWithdraw(file: TFile, site: SiteConfig): Promise<void> {
+		new Notice(`Withdrawing: ${file.name}...`);
+
+		// Update status bar
+		this.statusBar.setState('publishing');
+
+		const publisher = new Publisher(this.app.vault, this.settings);
+		const result = await publisher.withdraw(file, site);
+
+		// Log to activity log
+		const log = new ActivityLog(this.app.vault, site.vaultPath);
+		await log.log({
+			status: result.success ? 'withdrawn' : 'failed',
+			postTitle: file.basename,
+			filename: file.name,
+			prNumber: result.prNumber,
+			details: result.success ? 'PR closed' : undefined,
+			error: result.error,
+		});
+
+		if (result.success) {
+			this.statusBar.setState('success');
+			new Notice(`Withdrawn: ${file.name}\nPR #${result.prNumber} closed`);
+		} else {
+			this.statusBar.setState('error');
+			new Notice(`Failed to withdraw: ${result.error}`);
 		}
 	}
 }

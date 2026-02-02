@@ -12,6 +12,7 @@ export type LogStatus =
 	| 'published'
 	| 'queued'
 	| 'unpublished'
+	| 'withdrawn'
 	| 'failed'
 	| 'validation'
 	| 'warning'
@@ -22,6 +23,7 @@ const STATUS_ICONS: Record<LogStatus, string> = {
 	published: '✅',
 	queued: '⏳',
 	unpublished: '🗑️',
+	withdrawn: '↩️',
 	failed: '❌',
 	validation: '📋',
 	warning: '⚠️',
@@ -33,6 +35,7 @@ const STATUS_LABELS: Record<LogStatus, string> = {
 	published: 'Published',
 	queued: 'Queued for scheduled publish',
 	unpublished: 'Unpublished',
+	withdrawn: 'Withdrawn',
 	failed: 'Failed',
 	validation: 'Validation failed',
 	warning: 'Warning',
@@ -46,6 +49,7 @@ export interface LogEntry {
 	filename: string;
 	prNumber?: number;
 	prUrl?: string;
+	liveUrl?: string;
 	error?: string;
 	details?: string;
 }
@@ -168,6 +172,10 @@ date: 2026-01-15
 		let text = `### ${time} - ${icon} ${label}\n`;
 		text += `- **Post**: ${entry.postTitle}\n`;
 		text += `- **File**: \`${entry.filename}\`\n`;
+
+		if (entry.liveUrl) {
+			text += `- **Live**: [View post](${entry.liveUrl})\n`;
+		}
 
 		if (entry.prNumber) {
 			if (entry.prUrl) {

@@ -7,7 +7,7 @@ import { App, Notice, PluginSettingTab, Setting, requestUrl } from 'obsidian';
 import type GitHubWebPublishPlugin from '../main';
 import type { SiteConfig } from './types';
 import { performDeviceFlow, OAuthError } from '../github';
-import { AuthModal } from '../ui';
+import { AuthModal, SiteConfigModal } from '../ui';
 
 // Default OAuth Client ID - users can override with their own
 // To use your own, create an OAuth App at github.com/settings/developers
@@ -187,138 +187,129 @@ export class GitHubWebPublishSettingTab extends PluginSettingTab {
 	}
 
 	private renderSiteConfigSection(containerEl: HTMLElement): void {
-		new Setting(containerEl).setName('Site configuration').setHeading();
+		new Setting(containerEl).setName('Sites').setHeading();
 
-		// Get or create the first site config
-		let site = this.plugin.settings.sites[0];
-		if (!site) {
-			site = this.createDefaultSiteConfig();
-			this.plugin.settings.sites = [site];
+		const sites = this.plugin.settings.sites;
+
+		if (sites.length === 0) {
+			// No sites configured
+			const emptyState = containerEl.createDiv({ cls: 'github-publish-empty-sites' });
+			emptyState.createEl('p', {
+				text: 'No sites configured. Add a site to start publishing.',
+				cls: 'setting-item-description',
+			});
+		} else {
+			// List all configured sites
+			for (const site of sites) {
+				this.renderSiteCard(containerEl, site);
+			}
 		}
 
+		// Add site button
 		new Setting(containerEl)
-			.setName('Site name')
-			.setDesc('Display name for this site')
-			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('My Blog')
-				.setValue(site.name)
-				.onChange(async (value) => {
-					site.name = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('GitHub repository')
-			.setDesc('Repository in owner/repo format')
-			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('username/my-blog')
-				.setValue(site.githubRepo)
-				.onChange(async (value) => {
-					site.githubRepo = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Base branch')
-			.setDesc('Target branch for pull requests')
-			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('main')
-				.setValue(site.baseBranch)
-				.onChange(async (value) => {
-					site.baseBranch = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Vault path')
-			.setDesc('Path in your vault for this site (contains unpublished/, ready-to-publish-scheduled/, etc.)')
-			.addText(text => text
-				.setPlaceholder('_www/sites/my-blog')
-				.setValue(site.vaultPath)
-				.onChange(async (value) => {
-					site.vaultPath = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Create folder structure')
-			.setDesc('Create unpublished/, ready-to-publish-scheduled/, ready-to-publish-now/, and published/ folders')
 			.addButton(button => button
-				.setButtonText('Create folders')
-				.onClick(async () => {
-					if (!site.vaultPath) {
-						new Notice('Please set a vault path first');
-						return;
-					}
-
-					button.setDisabled(true);
-					button.setButtonText('Creating...');
-
-					try {
-						await this.createSiteFolders(site.vaultPath);
-						new Notice('Folder structure created');
-					} catch (error) {
-						new Notice(`Failed to create folders: ${error instanceof Error ? error.message : 'Unknown error'}`);
-					} finally {
-						button.setDisabled(false);
-						button.setButtonText('Create folders');
-					}
-				}));
-
-		// Collapsible advanced settings
-		const advancedDetails = containerEl.createEl('details', { cls: 'github-publish-advanced' });
-		advancedDetails.createEl('summary', { text: 'Advanced settings' });
-
-		new Setting(advancedDetails)
-			.setName('Posts path')
-			.setDesc('Path to posts directory in the repository')
-			.addText(text => text
-				.setPlaceholder('_posts')
-				.setValue(site.postsPath)
-				.onChange(async (value) => {
-					site.postsPath = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(advancedDetails)
-			.setName('Assets path')
-			.setDesc('Path to assets directory in the repository')
-			.addText(text => text
 				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('assets/images')
-				.setValue(site.assetsPath)
-				.onChange(async (value) => {
-					site.assetsPath = value;
-					await this.plugin.saveSettings();
+				.setButtonText('+ Add site')
+				.onClick(() => {
+					this.openSiteConfigModal(null);
 				}));
 
-		new Setting(advancedDetails)
-			.setName('Scheduled publish label')
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc('GitHub label for scheduled publish PRs')
-			.addText(text => text
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				.setPlaceholder('ready-to-publish')
-				.setValue(site.scheduledLabel)
-				.onChange(async (value) => {
-					site.scheduledLabel = value;
-					await this.plugin.saveSettings();
-				}));
+		// Info note
+		const infoEl = containerEl.createDiv({ cls: 'github-publish-info' });
+		const infoText = infoEl.createEl('p', { cls: 'setting-item-description' });
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
+		infoText.setText('All operations use the GitHub API directly - no local git installation required.');
 	}
 
-	private createDefaultSiteConfig(): SiteConfig {
-		return {
-			name: '',
-			githubRepo: '',
-			baseBranch: 'main',
-			postsPath: '_posts',
-			assetsPath: 'assets/images',
-			scheduledLabel: 'ready-to-publish',
-			vaultPath: '',
-		};
+	/**
+	 * Render a single site card in the settings
+	 */
+	private renderSiteCard(containerEl: HTMLElement, site: SiteConfig): void {
+		const siteCard = containerEl.createDiv({ cls: 'github-publish-site-card' });
+
+		// Site info
+		const infoDiv = siteCard.createDiv({ cls: 'github-publish-site-info' });
+
+		// Site name with folder icon
+		const nameEl = infoDiv.createDiv({ cls: 'github-publish-site-name' });
+		nameEl.createSpan({ text: '📁 ' });
+		nameEl.createSpan({ text: site.name || 'Untitled site' });
+
+		// Vault path
+		const vaultDetail = infoDiv.createDiv({ cls: 'github-publish-site-detail' });
+		vaultDetail.setText(`Vault: ${site.vaultPath || '(not set)'}`);
+
+		// GitHub repo
+		const repoDetail = infoDiv.createDiv({ cls: 'github-publish-site-detail' });
+		repoDetail.setText(`GitHub: ${site.githubRepo || '(not set)'} → ${site.baseBranch}`);
+
+		// Buttons
+		const buttonsDiv = siteCard.createDiv({ cls: 'github-publish-site-buttons' });
+
+		// Configure button
+		const configBtn = buttonsDiv.createEl('button', { text: 'Configure' });
+		configBtn.addEventListener('click', () => { this.openSiteConfigModal(site); });
+
+		// Create folders button
+		const foldersBtn = buttonsDiv.createEl('button', { text: 'Create folders' });
+		foldersBtn.addEventListener('click', () => { void this.handleCreateFolders(site, foldersBtn); });
+	}
+
+	/**
+	 * Handle creating folder structure for a site
+	 */
+	private async handleCreateFolders(site: SiteConfig, button: HTMLButtonElement): Promise<void> {
+		if (!site.vaultPath) {
+			new Notice('Please set a vault path first');
+			return;
+		}
+
+		button.disabled = true;
+		button.textContent = 'Creating...';
+
+		try {
+			await this.createSiteFolders(site.vaultPath);
+			new Notice(`Folder structure created for ${site.name}`);
+		} catch (error) {
+			new Notice(`Failed to create folders: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			button.disabled = false;
+			button.textContent = 'Create folders';
+		}
+	}
+
+	/**
+	 * Open the site configuration modal for add/edit
+	 */
+	private openSiteConfigModal(site: SiteConfig | null): void {
+		const modal = new SiteConfigModal(this.app, site, {
+			onSave: async (updatedSite, isNew) => {
+				if (isNew) {
+					// Add new site
+					this.plugin.settings.sites.push(updatedSite);
+				} else {
+					// Update existing site - find by vault path (unique identifier)
+					const index = this.plugin.settings.sites.findIndex(
+						s => s.vaultPath === site?.vaultPath
+					);
+					if (index !== -1) {
+						this.plugin.settings.sites[index] = updatedSite;
+					}
+				}
+				await this.plugin.saveSettings();
+				this.display(); // Refresh the settings view
+			},
+			onDelete: async (siteToDelete) => {
+				// Remove site by vault path
+				this.plugin.settings.sites = this.plugin.settings.sites.filter(
+					s => s.vaultPath !== siteToDelete.vaultPath
+				);
+				await this.plugin.saveSettings();
+				new Notice(`Site "${siteToDelete.name}" removed`);
+				this.display(); // Refresh the settings view
+			},
+		});
+		modal.open();
 	}
 
 	private renderPublishingOptionsSection(containerEl: HTMLElement): void {

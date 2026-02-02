@@ -17,6 +17,8 @@ export interface SiteConfig {
 	scheduledLabel: string;
 	/** Local vault path for this site */
 	vaultPath: string;
+	/** Base URL of the published site (e.g., 'https://example.github.io/blog') */
+	siteBaseUrl?: string;
 }
 
 export interface GitHubAuth {

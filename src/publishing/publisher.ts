@@ -16,10 +16,34 @@ export interface PublishResult {
 	success: boolean;
 	prNumber?: number;
 	prUrl?: string;
+	/** Live URL of the published post */
+	liveUrl?: string;
 	error?: string;
 	validationResult?: ValidationResult;
 	/** Assets referenced in the content (for future upload) */
 	assets?: AssetReference[];
+}
+
+export interface UnpublishResult {
+	success: boolean;
+	deletedFiles: string[];
+	error?: string;
+}
+
+export interface UpdateResult {
+	success: boolean;
+	prNumber?: number;
+	prUrl?: string;
+	/** Live URL of the updated post */
+	liveUrl?: string;
+	error?: string;
+	validationResult?: ValidationResult;
+}
+
+export interface WithdrawResult {
+	success: boolean;
+	prNumber?: number;
+	error?: string;
 }
 
 /**
@@ -162,11 +186,270 @@ export class Publisher {
 				await client.addLabels(pr.number, [site.scheduledLabel]);
 			}
 
+			// Generate live URL if site base URL is configured
+			let liveUrl: string | undefined;
+			if (site.siteBaseUrl) {
+				// Jekyll uses frontmatter date for permalink, fallback to file date prefix
+				const frontmatterDate = this.extractDateFromContent(rawContent);
+				const urlDate = frontmatterDate || datePrefix;
+
+				if (urlDate) {
+					// Jekyll permalink format: /:categories/:year/:month/:day/:title.html
+					const [year, month, day] = urlDate.split('-');
+					const baseUrl = site.siteBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+
+					// Extract category from frontmatter for URL
+					const category = this.extractCategoryFromContent(rawContent);
+					if (category) {
+						liveUrl = `${baseUrl}/${category}/${year}/${month}/${day}/${slug}.html`;
+					} else {
+						// Fallback without category
+						liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}.html`;
+					}
+				}
+			}
+
 			return {
 				success: true,
 				prNumber: pr.number,
 				prUrl: pr.html_url,
+				liveUrl,
 				assets,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			return { success: false, error: message };
+		}
+	}
+
+	/**
+	 * Update an already-published file on GitHub
+	 *
+	 * @param file The file to update
+	 * @param site The site configuration
+	 * @param immediate If true, merge PR immediately; if false, add scheduled label
+	 */
+	async update(file: TFile, site: SiteConfig, immediate: boolean): Promise<UpdateResult> {
+		// Validate we have auth
+		if (!this.settings.githubAuth?.token) {
+			return { success: false, error: 'Not authenticated with GitHub' };
+		}
+
+		// Validate frontmatter before any GitHub operations
+		const validator = new FrontmatterValidator(this.vault);
+		const validationResult = await validator.validate(file);
+
+		if (!validationResult.valid) {
+			const errorMessage = FrontmatterValidator.formatErrors(validationResult);
+			return {
+				success: false,
+				error: `Validation failed:\n${errorMessage}`,
+				validationResult,
+			};
+		}
+
+		// Parse owner/repo from site config
+		const [owner, repo] = site.githubRepo.split('/');
+		if (!owner || !repo) {
+			return { success: false, error: 'Invalid repository format. Expected owner/repo' };
+		}
+
+		// Create GitHub client
+		const client = new GitHubClient({
+			token: this.settings.githubAuth.token,
+			owner,
+			repo,
+		});
+
+		try {
+			// Read file content
+			const rawContent = await this.vault.read(file);
+
+			// Generate slug for branch name and asset prefix
+			const slug = slugify(file.basename);
+
+			// Process content: convert wiki-links to standard markdown
+			const processor = new ContentProcessor({
+				assetsBasePath: `/${site.assetsPath}/`,
+				wikiLinkStyle: 'text',
+				assetPrefix: slug,
+			});
+			const { content, assets } = processor.process(rawContent);
+			const datePrefix = this.settings.addDatePrefix ? getTodayDate() : '';
+			const targetFilename = datePrefix ? `${datePrefix}-${slug}.md` : `${slug}.md`;
+			const branchName = `update/${slug}`;
+
+			// Find the existing file in the repo
+			const postsFiles = await client.listFiles(site.postsPath, site.baseBranch);
+			const matchingPosts = postsFiles.filter(f => {
+				const nameWithoutExt = f.name.replace(/\.md$/, '');
+				// Match exact slug or date-prefixed slug
+				return nameWithoutExt === slug ||
+					   nameWithoutExt.match(new RegExp(`^\\d{4}-\\d{2}-\\d{2}-${slug}$`));
+			});
+
+			if (matchingPosts.length === 0) {
+				return {
+					success: false,
+					error: `No existing post found matching "${slug}" in ${site.postsPath}/. Use publish instead.`,
+				};
+			}
+
+			// Use the most recent matching post (in case there are duplicates)
+			const existingPost = matchingPosts[matchingPosts.length - 1];
+			if (!existingPost) {
+				return { success: false, error: 'Could not find existing post' };
+			}
+
+			// Create branch
+			await client.createBranch(branchName, site.baseBranch);
+
+			// Get the existing file's SHA from the new branch
+			const existingFile = await client.getFile(existingPost.path, branchName);
+			if (!existingFile) {
+				return { success: false, error: 'Could not get existing file SHA' };
+			}
+
+			// Update the file (keep the same path to preserve the original date prefix)
+			await client.createOrUpdateFile(
+				existingPost.path,
+				content,
+				`Update post: ${file.basename}`,
+				branchName,
+				false,
+				existingFile.sha
+			);
+
+			// Upload new/updated assets
+			for (const asset of assets) {
+				const assetFile = await this.findAssetFile(asset.filename);
+				if (assetFile) {
+					const assetContent = await this.vault.readBinary(assetFile);
+					const base64Content = this.arrayBufferToBase64(assetContent);
+
+					// Check if asset already exists
+					const existingAsset = await client.getFile(asset.targetPath, branchName);
+					await client.createOrUpdateFile(
+						asset.targetPath,
+						base64Content,
+						existingAsset ? `Update image: ${asset.filename}` : `Add image: ${asset.filename}`,
+						branchName,
+						true,
+						existingAsset?.sha
+					);
+				} else {
+					console.warn(`[GitHubWebPublish] Asset not found: ${asset.filename}`);
+				}
+			}
+
+			// Create PR
+			const prTitle = `Update: ${file.basename}`;
+			const prBody = `Updating "${file.basename}" on ${site.name}.\n\nCreated by Obsidian GitHub Web Publish plugin.`;
+			const pr = await client.createPullRequest(prTitle, branchName, site.baseBranch, prBody);
+
+			if (immediate) {
+				// Merge immediately
+				await client.mergePullRequest(pr.number, prTitle);
+				// Clean up branch
+				try {
+					await client.deleteBranch(branchName);
+				} catch {
+					// Branch deletion can fail if GitHub auto-deleted it
+				}
+			} else {
+				// Add scheduled publish label
+				await client.addLabels(pr.number, [site.scheduledLabel]);
+			}
+
+			// Generate live URL if site base URL is configured
+			let liveUrl: string | undefined;
+			if (site.siteBaseUrl) {
+				// Jekyll uses frontmatter date for permalink, fallback to existing file date
+				const frontmatterDate = this.extractDateFromContent(rawContent);
+				// Extract date from existing filename (YYYY-MM-DD-slug.md)
+				const existingDateMatch = existingPost.name.match(/^(\d{4}-\d{2}-\d{2})-/);
+				const urlDate = frontmatterDate || (existingDateMatch ? existingDateMatch[1] : datePrefix);
+
+				if (urlDate) {
+					const [year, month, day] = urlDate.split('-');
+					const baseUrl = site.siteBaseUrl.replace(/\/$/, '');
+					const category = this.extractCategoryFromContent(rawContent);
+					if (category) {
+						liveUrl = `${baseUrl}/${category}/${year}/${month}/${day}/${slug}.html`;
+					} else {
+						liveUrl = `${baseUrl}/${year}/${month}/${day}/${slug}.html`;
+					}
+				}
+			}
+
+			return {
+				success: true,
+				prNumber: pr.number,
+				prUrl: pr.html_url,
+				liveUrl,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			return { success: false, error: message };
+		}
+	}
+
+	/**
+	 * Withdraw a pending publish by closing the PR
+	 *
+	 * Used when a file is moved from ready-to-publish-scheduled back to unpublished.
+	 * This cancels the pending PR without affecting the live site.
+	 *
+	 * @param file The file being withdrawn
+	 * @param site The site configuration
+	 */
+	async withdraw(file: TFile, site: SiteConfig): Promise<WithdrawResult> {
+		// Validate we have auth
+		if (!this.settings.githubAuth?.token) {
+			return { success: false, error: 'Not authenticated with GitHub' };
+		}
+
+		// Parse owner/repo from site config
+		const [owner, repo] = site.githubRepo.split('/');
+		if (!owner || !repo) {
+			return { success: false, error: 'Invalid repository format. Expected owner/repo' };
+		}
+
+		// Create GitHub client
+		const client = new GitHubClient({
+			token: this.settings.githubAuth.token,
+			owner,
+			repo,
+		});
+
+		try {
+			// Generate slug to find the branch
+			const slug = slugify(file.basename);
+			const branchName = `publish/${slug}`;
+
+			// Find the open PR for this branch
+			const pr = await client.findOpenPR(branchName);
+
+			if (!pr) {
+				return {
+					success: false,
+					error: `No open PR found for "${file.basename}". The post may have already been published or withdrawn.`,
+				};
+			}
+
+			// Close the PR without merging
+			await client.closePullRequest(pr.number);
+
+			// Clean up the branch
+			try {
+				await client.deleteBranch(branchName);
+			} catch {
+				// Branch deletion can fail if already deleted
+			}
+
+			return {
+				success: true,
+				prNumber: pr.number,
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error';
@@ -217,5 +500,168 @@ export class Publisher {
 			chunks.push(String.fromCharCode.apply(null, Array.from(chunk)));
 		}
 		return btoa(chunks.join(''));
+	}
+
+	/**
+	 * Extract the date from frontmatter for URL generation
+	 * Returns date in YYYY-MM-DD format or null if not found
+	 */
+	private extractDateFromContent(content: string): string | null {
+		// Match frontmatter
+		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+		if (!frontmatterMatch || !frontmatterMatch[1]) return null;
+
+		const frontmatter = frontmatterMatch[1];
+
+		// Match date: YYYY-MM-DD format
+		const dateMatch = frontmatter.match(/date:\s*(\d{4}-\d{2}-\d{2})/);
+		if (dateMatch && dateMatch[1]) {
+			return dateMatch[1];
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extract the first category from frontmatter for URL generation
+	 * Handles both array and string formats
+	 */
+	private extractCategoryFromContent(content: string): string | null {
+		// Match frontmatter
+		const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+		if (!frontmatterMatch || !frontmatterMatch[1]) return null;
+
+		const frontmatter = frontmatterMatch[1];
+
+		// Try to match categories array format: categories:\n  - category1
+		const arrayMatch = frontmatter.match(/categories:\s*\n\s*-\s*(.+)/);
+		if (arrayMatch && arrayMatch[1]) {
+			return arrayMatch[1].trim().toLowerCase().replace(/\s+/g, '%20');
+		}
+
+		// Try to match single category format: categories: category1
+		const singleMatch = frontmatter.match(/categories:\s*(.+)/);
+		if (singleMatch && singleMatch[1]) {
+			const value = singleMatch[1].trim();
+			// Skip if it's an array indicator
+			if (!value.startsWith('-') && !value.startsWith('[')) {
+				return value.toLowerCase().replace(/\s+/g, '%20');
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Unpublish a file from GitHub
+	 *
+	 * @param file The file being unpublished
+	 * @param site The site configuration
+	 * @param deleteAssets If true, also delete associated assets
+	 */
+	async unpublish(file: TFile, site: SiteConfig, deleteAssets: boolean): Promise<UnpublishResult> {
+		// Validate we have auth
+		if (!this.settings.githubAuth?.token) {
+			return { success: false, deletedFiles: [], error: 'Not authenticated with GitHub' };
+		}
+
+		// Parse owner/repo from site config
+		const [owner, repo] = site.githubRepo.split('/');
+		if (!owner || !repo) {
+			return { success: false, deletedFiles: [], error: 'Invalid repository format. Expected owner/repo' };
+		}
+
+		// Create GitHub client
+		const client = new GitHubClient({
+			token: this.settings.githubAuth.token,
+			owner,
+			repo,
+		});
+
+		try {
+			// Generate slug from filename
+			const slug = slugify(file.basename);
+			const branchName = `unpublish/${slug}`;
+
+			// List files in _posts to find matching post
+			const postsFiles = await client.listFiles(site.postsPath, site.baseBranch);
+
+			// Find files matching the slug pattern (YYYY-MM-DD-slug.md or just slug.md)
+			const matchingPosts = postsFiles.filter(f => {
+				const nameWithoutExt = f.name.replace(/\.md$/, '');
+				// Match exact slug or date-prefixed slug
+				return nameWithoutExt === slug ||
+					   nameWithoutExt.match(new RegExp(`^\\d{4}-\\d{2}-\\d{2}-${slug}$`));
+			});
+
+			if (matchingPosts.length === 0) {
+				return {
+					success: false,
+					deletedFiles: [],
+					error: `No published post found matching "${slug}" in ${site.postsPath}/`
+				};
+			}
+
+			// Create branch for unpublish
+			await client.createBranch(branchName, site.baseBranch);
+
+			const deletedFiles: string[] = [];
+
+			// Delete matching post files
+			for (const post of matchingPosts) {
+				await client.deleteFile(
+					post.path,
+					`Remove post: ${post.name}`,
+					branchName,
+					post.sha
+				);
+				deletedFiles.push(post.path);
+			}
+
+			// Optionally delete associated assets
+			if (deleteAssets) {
+				try {
+					const assetsFiles = await client.listFiles(site.assetsPath, branchName);
+					// Find assets that start with the slug (our naming convention)
+					const matchingAssets = assetsFiles.filter(f => f.name.startsWith(`${slug}-`));
+
+					for (const asset of matchingAssets) {
+						await client.deleteFile(
+							asset.path,
+							`Remove asset: ${asset.name}`,
+							branchName,
+							asset.sha
+						);
+						deletedFiles.push(asset.path);
+					}
+				} catch {
+					// Assets directory might not exist or be empty, continue
+					console.debug('[GitHubWebPublish] Could not list/delete assets, continuing');
+				}
+			}
+
+			// Create PR
+			const prTitle = `Unpublish: ${file.basename}`;
+			const prBody = `Removing "${file.basename}" from ${site.name}.\n\nDeleted files:\n${deletedFiles.map(f => `- ${f}`).join('\n')}\n\nCreated by Obsidian GitHub Web Publish plugin.`;
+			const pr = await client.createPullRequest(prTitle, branchName, site.baseBranch, prBody);
+
+			// Merge immediately (unpublish is always immediate)
+			await client.mergePullRequest(pr.number, prTitle);
+
+			// Clean up branch
+			try {
+				await client.deleteBranch(branchName);
+			} catch {
+				// Branch deletion can fail if GitHub auto-deleted it
+			}
+
+			return {
+				success: true,
+				deletedFiles,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			return { success: false, deletedFiles: [], error: message };
+		}
 	}
 }

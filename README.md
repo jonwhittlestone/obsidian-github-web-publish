@@ -4,11 +4,16 @@ An Obsidian plugin for publishing notes to Jekyll/GitHub Pages via PR workflow.
 
 ## Features
 
-- **Directory-based publishing**: Move files to trigger publish actions
-- **Scheduled publishing**: Queue posts for automatic merge at 2pm UK time
+- **Directory-based publishing**: Move files between folders to trigger publish actions
+- **Multi-site support**: Publish to multiple Jekyll blogs from one vault
+- **Scheduled publishing**: Queue posts for automatic merge via GitHub Actions
 - **Immediate publishing**: Merge PRs instantly when needed
-- **Mobile compatible**: Works on iOS and Android
-- **No git required**: All GitHub operations via API
+- **Update workflow**: Republish existing posts with updates
+- **Unpublish/Withdraw**: Remove posts or cancel pending PRs
+- **Asset handling**: Automatically upload images referenced in posts
+- **Frontmatter validation**: Validate posts before publishing
+- **Activity logging**: Track all publish operations in a markdown log
+- **Mobile compatible**: Works on iOS and Android (no git required)
 
 ## Installation
 
@@ -24,30 +29,134 @@ An Obsidian plugin for publishing notes to Jekyll/GitHub Pages via PR workflow.
 2. Extract to `.obsidian/plugins/obsidian-github-web-publish/`
 3. Enable in Settings → Community plugins
 
-## Usage
+## Quick Start
 
-### Directory Structure
+1. **Authenticate**: Settings → GitHub Web Publish → Login with GitHub
+2. **Add a site**: Click "Add Site" and configure your Jekyll repository
+3. **Create folders**: Use "Create Folders" button to set up the directory structure
+4. **Write & publish**: Create posts in `unpublished/`, then move to publish
 
-Create this structure in your vault:
+## Directory Structure
+
+Each configured site uses this folder structure:
 
 ```
 _www/sites/<your-site>/
-├── unpublished/          # Draft posts (not synced)
-├── ready-to-publish-scheduled/    # Queue for scheduled publish
-├── ready-to-publish-now/ # Immediate publish
-└── published/            # Archive of published posts
+├── unpublished/              # Draft posts
+├── ready-to-publish-scheduled/  # Queue for scheduled publish (via GitHub Action)
+├── ready-to-publish-now/     # Immediate publish (merges PR right away)
+├── published/                # Archive of successfully published posts
+└── _publish-log.md           # Activity log (auto-generated)
 ```
 
-### Publishing Workflow
+## Publishing Workflows
 
-1. **Write** your post in `unpublished/`
-2. **Schedule**: Move to `ready-to-publish-scheduled/` (publishes at 2pm UK)
-3. **Or immediate**: Move to `ready-to-publish-now/` (publishes now)
-4. Post automatically moves to `published/` after success
+### Publish a New Post
 
-### Unpublishing
+1. **Write** your post in `unpublished/` with valid frontmatter
+2. **Choose timing**:
+   - Move to `ready-to-publish-scheduled/` → Creates PR with label for scheduled merge
+   - Move to `ready-to-publish-now/` → Creates and merges PR immediately
+3. Post automatically moves to `published/` after success
 
-Move a post from `published/` back to `unpublished/` to remove it from your blog.
+### Update an Existing Post
+
+Move a post from `published/` to `ready-to-publish-now/` (or scheduled) to update it on the live site. The plugin finds the existing post and updates it in place.
+
+### Unpublish a Post
+
+Move a post from `published/` back to `unpublished/`. This creates a PR that deletes the post from your Jekyll site.
+
+### Withdraw a Pending Publish
+
+Move a post from `ready-to-publish-scheduled/` back to `unpublished/`. This closes the pending PR without merging (the post was never published).
+
+## Commands
+
+Access these via the Command Palette (Ctrl/Cmd + P):
+
+| Command | Description |
+|---------|-------------|
+| **Publish current note (immediate)** | Publish the active note right now |
+| **Republish current note (update existing)** | Update an already-published post |
+| **View activity log** | Open the site's publish activity log |
+| **Open settings** | Open plugin settings |
+
+## Frontmatter Requirements
+
+Posts must include valid YAML frontmatter. Required fields:
+
+```yaml
+---
+title: My Post Title
+---
+```
+
+Optional fields:
+
+```yaml
+---
+title: My Post Title
+layout: post
+description: A brief description
+tags:
+  - tag1
+  - tag2
+categories:
+  - category1
+date: 2026-01-15
+image: /assets/images/featured.jpg
+author: Your Name
+---
+```
+
+The plugin validates frontmatter before publishing and blocks invalid posts with helpful error messages.
+
+## Site Configuration
+
+Each site can be configured with:
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Name** | Display name for the site | - |
+| **Vault Path** | Path in vault for this site's folders | `_www/sites/<name>` |
+| **GitHub Repo** | Repository in `owner/repo` format | - |
+| **Base Branch** | Branch to merge PRs into | `main` |
+| **Site Base URL** | Live site URL for generating post links | - |
+| **Posts Path** | Path in repo for posts | `_posts` |
+| **Assets Path** | Path in repo for images | `assets/images` |
+| **Scheduled Label** | Label for scheduled publish PRs | `ready-to-publish` |
+
+## Activity Log
+
+Each site maintains an activity log (`_publish-log.md`) that tracks:
+
+- ✅ Published posts (with live URL)
+- ⏳ Queued posts (with PR link)
+- ↩️ Withdrawn posts
+- 🗑️ Unpublished posts
+- ❌ Failed operations (with error details)
+- 📋 Validation failures
+
+## How It Works
+
+1. **File watcher** detects when you move files between folders
+2. **Validation** checks frontmatter before any GitHub operations
+3. **Content processing** converts wiki-links and collects assets
+4. **GitHub API** creates branches, uploads files, and manages PRs
+5. **Activity logging** records the operation result
+
+The plugin uses Obsidian's `requestUrl` API for all GitHub operations, which:
+- Bypasses CORS restrictions on mobile
+- Requires no local git installation
+- Works seamlessly on iOS/Android
+
+## Sync Protection
+
+The plugin only responds to **rename** events, not **create** events. This means:
+- Files synced via Dropbox/iCloud (appear as creates) are ignored
+- Only manual file moves trigger publish actions
+- Safe to use with cloud sync services
 
 ## Development
 
@@ -87,60 +196,45 @@ make clean       # Remove build artifacts
 make symlink     # Create symlink to test vault
 ```
 
-### Testing
-
-```bash
-# Run all tests
-make test
-
-# Run tests in watch mode
-make test-watch
-```
-
-### Testing in Obsidian
-
-After starting the development build:
-
-1. Run `make dev` (keep terminal open)
-2. Open the test vault in Obsidian:
-   - File → Open vault → `/home/jon/code/playground/test-vault-for-obsidian-development`
-3. Enable the plugin:
-   - Settings → Community plugins → Enable "GitHub Web Publish"
-4. Test the settings:
-   - Settings → GitHub Web Publish (under Community plugins)
-5. Changes auto-reload when you save source files (with Hot Reload plugin installed)
-
 ### Project Structure
 
 ```
 obsidian-github-web-publish/
 ├── src/
 │   ├── main.ts              # Plugin entry point
-│   ├── settings/            # Settings UI
-│   ├── github/              # GitHub API integration
-│   ├── publishing/          # File watching & publishing logic
+│   ├── settings/            # Settings UI & types
+│   ├── github/              # GitHub API client
+│   ├── publishing/          # File watcher, publisher, validator
 │   ├── logging/             # Activity log
-│   └── ui/                  # Modals, status bar, notices
-├── tests/                   # Unit tests
-│   └── mocks/               # Obsidian API mocks
+│   └── ui/                  # Modals, status bar
+├── tests/                   # Unit tests (97 tests)
 ├── Makefile                 # Build commands
 ├── manifest.json            # Obsidian plugin manifest
 └── package.json             # npm configuration
 ```
 
-## Configuration
-
-After installing, configure in Settings → GitHub Web Publish:
-
-1. **Login with GitHub**: Authenticate via OAuth device flow
-2. **Add Site**: Configure your Jekyll blog repository
-3. **Set paths**: Specify `_posts` and assets directories
-
 ## Requirements
 
 - Obsidian v0.12.11 or higher
 - GitHub account with repository access
-- Jekyll blog with GitHub Actions for deployment
+- Jekyll blog with GitHub Pages deployment
+
+## Troubleshooting
+
+### Post returns 404 after publishing
+
+Jekyll uses the frontmatter `date:` field for the URL, not the filename's date. Make sure your frontmatter date matches when you expect the post to appear.
+
+### Validation errors
+
+Check the activity log for specific validation errors. Common issues:
+- Missing `title` field
+- Invalid date format (use YYYY-MM-DD)
+- Title exceeds 200 characters
+
+### PR not merging
+
+For scheduled publishes, ensure your GitHub repository has a GitHub Action configured to merge PRs with the scheduled label.
 
 ## License
 

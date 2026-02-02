@@ -127,13 +127,15 @@ export class GitHubClient {
 	 * @param message Commit message
 	 * @param branch Target branch
 	 * @param isBase64 If true, content is already base64-encoded (for binary files)
+	 * @param existingSha SHA of the existing file (required for updates)
 	 */
 	async createOrUpdateFile(
 		path: string,
 		content: string,
 		message: string,
 		branch: string,
-		isBase64 = false
+		isBase64 = false,
+		existingSha?: string
 	): Promise<CreateFileResult> {
 		let encodedContent: string;
 
@@ -151,15 +153,22 @@ export class GitHubClient {
 			content: { sha: string; path: string };
 		}
 
+		const body: { message: string; content: string; branch: string; sha?: string } = {
+			message,
+			content: encodedContent,
+			branch,
+		};
+
+		// Include SHA for updates to existing files
+		if (existingSha) {
+			body.sha = existingSha;
+		}
+
 		const response = await this.request<FileResponse>(
 			`/repos/${this.owner}/${this.repo}/contents/${path}`,
 			{
 				method: 'PUT',
-				body: {
-					message,
-					content: encodedContent,
-					branch,
-				},
+				body,
 			}
 		);
 
@@ -234,6 +243,43 @@ export class GitHubClient {
 	}
 
 	/**
+	 * Close a pull request without merging
+	 */
+	async closePullRequest(prNumber: number): Promise<void> {
+		await this.request(
+			`/repos/${this.owner}/${this.repo}/pulls/${prNumber}`,
+			{
+				method: 'PATCH',
+				body: { state: 'closed' },
+			}
+		);
+	}
+
+	/**
+	 * Find an open PR by branch name
+	 */
+	async findOpenPR(branchName: string): Promise<{ number: number; html_url: string } | null> {
+		interface PRItem {
+			number: number;
+			html_url: string;
+			head: { ref: string };
+			state: string;
+		}
+
+		try {
+			const prs = await this.request<PRItem[]>(
+				`/repos/${this.owner}/${this.repo}/pulls?head=${this.owner}:${branchName}&state=open`
+			);
+			if (prs.length > 0 && prs[0]) {
+				return { number: prs[0].number, html_url: prs[0].html_url };
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	}
+
+	/**
 	 * Delete a branch
 	 */
 	async deleteBranch(branchName: string): Promise<void> {
@@ -241,5 +287,63 @@ export class GitHubClient {
 			`/repos/${this.owner}/${this.repo}/git/refs/heads/${branchName}`,
 			{ method: 'DELETE' }
 		);
+	}
+
+	/**
+	 * List files in a directory
+	 */
+	async listFiles(path: string, branch?: string): Promise<Array<{ name: string; path: string; sha: string }>> {
+		interface ContentItem {
+			name: string;
+			path: string;
+			sha: string;
+			type: string;
+		}
+
+		const ref = branch ? `?ref=${branch}` : '';
+		const data = await this.request<ContentItem[]>(
+			`/repos/${this.owner}/${this.repo}/contents/${path}${ref}`
+		);
+
+		return data
+			.filter(item => item.type === 'file')
+			.map(item => ({ name: item.name, path: item.path, sha: item.sha }));
+	}
+
+	/**
+	 * Delete a file from the repository
+	 */
+	async deleteFile(path: string, message: string, branch: string, sha: string): Promise<void> {
+		await this.request(
+			`/repos/${this.owner}/${this.repo}/contents/${path}`,
+			{
+				method: 'DELETE',
+				body: {
+					message,
+					sha,
+					branch,
+				},
+			}
+		);
+	}
+
+	/**
+	 * Get file info (including SHA) from the repository
+	 */
+	async getFile(path: string, branch?: string): Promise<{ sha: string; content: string } | null> {
+		interface FileResponse {
+			sha: string;
+			content: string;
+		}
+
+		try {
+			const ref = branch ? `?ref=${branch}` : '';
+			const data = await this.request<FileResponse>(
+				`/repos/${this.owner}/${this.repo}/contents/${path}${ref}`
+			);
+			return { sha: data.sha, content: data.content };
+		} catch {
+			return null;
+		}
 	}
 }

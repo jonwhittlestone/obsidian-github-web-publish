@@ -119,23 +119,40 @@ describe('FileWatcher', () => {
 			});
 		});
 
+		describe('withdraw triggers', () => {
+			it('should trigger withdraw when moving from ready-to-publish-scheduled to unpublished', () => {
+				const file = createMockFile('_www/sites/test-site/unpublished/post.md');
+				const oldPath = '_www/sites/test-site/ready-to-publish-scheduled/post.md';
+
+				const action = watcher.handleFileMove(file, oldPath);
+
+				expect(action.type).toBe('withdraw');
+			});
+		});
+
 		describe('update triggers', () => {
-			it('should trigger update when moving from published to ready-to-publish-scheduled', () => {
+			it('should trigger scheduled update when moving from published to ready-to-publish-scheduled', () => {
 				const file = createMockFile('_www/sites/test-site/ready-to-publish-scheduled/post.md');
 				const oldPath = '_www/sites/test-site/published/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
 
 				expect(action.type).toBe('update');
+				if (action.type === 'update') {
+					expect(action.immediate).toBe(false);
+				}
 			});
 
-			it('should trigger update when moving from published to ready-to-publish-now', () => {
+			it('should trigger immediate update when moving from published to ready-to-publish-now', () => {
 				const file = createMockFile('_www/sites/test-site/ready-to-publish-now/post.md');
 				const oldPath = '_www/sites/test-site/published/post.md';
 
 				const action = watcher.handleFileMove(file, oldPath);
 
 				expect(action.type).toBe('update');
+				if (action.type === 'update') {
+					expect(action.immediate).toBe(true);
+				}
 			});
 		});
 
